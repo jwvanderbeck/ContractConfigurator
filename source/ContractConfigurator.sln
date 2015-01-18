@@ -12,6 +12,11 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CC_SCANsat", "CC_SCANsat\CC
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CC_RemoteTech", "CC_RemoteTech\CC_RemoteTech.csproj", "{AA91A060-C3CA-4770-8B39-F053E6ADAB5F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CC_FinalFrontier", "CC_FinalFrontier\CC_FinalFrontier.csproj", "{0D494BD8-EA8C-47E5-83C7-3317879F5476}"
+	ProjectSection(ProjectDependencies) = postProject
+		{4082B9BC-243E-456D-A9C5-705F4428EB36} = {4082B9BC-243E-456D-A9C5-705F4428EB36}
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -30,6 +35,10 @@ Global
 		{AA91A060-C3CA-4770-8B39-F053E6ADAB5F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{AA91A060-C3CA-4770-8B39-F053E6ADAB5F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{AA91A060-C3CA-4770-8B39-F053E6ADAB5F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0D494BD8-EA8C-47E5-83C7-3317879F5476}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0D494BD8-EA8C-47E5-83C7-3317879F5476}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0D494BD8-EA8C-47E5-83C7-3317879F5476}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0D494BD8-EA8C-47E5-83C7-3317879F5476}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
