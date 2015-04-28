@@ -6,30 +6,30 @@ using UnityEngine;
 using KSP;
 using Contracts;
 using Contracts.Parameters;
+using ContractConfigurator.Parameters;
 
 namespace ContractConfigurator
 {
-    /*
-     * ParameterFactory wrapper for AltitudeRecord ContractParameter.
-     */
-    public class AltitudeRecordFactory : ParameterFactory
+    /// <summary>
+    /// ParameterFactory wrapper for AtLeast ContractParameter.
+    /// </summary>
+    public class AtLeastFactory : ParameterFactory
     {
-        protected double altitude;
+        protected int count;
 
         public override bool Load(ConfigNode configNode)
         {
             // Load base class
             bool valid = base.Load(configNode);
 
-            // Get altitude
-            valid &= ConfigNodeUtil.ParseValue<double>(configNode, "altitude", ref altitude, this, x => Validation.GT(x, 0.0));
+            valid &= ConfigNodeUtil.ParseValue<int>(configNode, "count", x => count = x, this);
 
             return valid;
         }
 
         public override ContractParameter Generate(Contract contract)
         {
-            return new AltitudeRecord(altitude);
+            return new AtLeast(title, count);
         }
     }
 }

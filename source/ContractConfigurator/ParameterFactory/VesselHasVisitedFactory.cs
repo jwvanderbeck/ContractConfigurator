@@ -10,9 +10,10 @@ using ContractConfigurator.Parameters;
 
 namespace ContractConfigurator
 {
-    /*
-     * ParameterFactory wrapper for VesselHasVisited ContractParameter.
-     */
+    /// <summary>
+    /// ParameterFactory wrapper for VesselHasVisited ContractParameter.
+    /// </summary>
+    [Obsolete("VesselHasVisited is obsolete as of Contract Configurator 0.7.5 and will be removed in 1.0.0.  Please use Orbit or ReachState (with disableOnStateChange = true) instead.")]
     public class VesselHasVisitedFactory : ParameterFactory
     {
         protected FlightLog.EntryType situation;
@@ -22,8 +23,10 @@ namespace ContractConfigurator
             // Load base class
             bool valid = base.Load(configNode);
 
-            valid &= ConfigNodeUtil.ParseValue<FlightLog.EntryType>(configNode, "situation", ref situation, this);
+            valid &= ConfigNodeUtil.ParseValue<FlightLog.EntryType>(configNode, "situation", x => situation = x, this);
             valid &= ValidateTargetBody(configNode);
+
+            LoggingUtil.LogWarning(this, "VesselHasVisited is obsolete as of Contract Configurator 0.7.5 and will be removed in 1.0.0.  Please use Orbit or ReachState (with disableOnStateChange = true) instead.");
 
             return valid;
         }

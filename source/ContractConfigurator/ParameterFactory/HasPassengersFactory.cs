@@ -10,26 +10,37 @@ using ContractConfigurator.Parameters;
 
 namespace ContractConfigurator
 {
-    /*
-     * ParameterFactory wrapper for HasPassengers ContractParameter.
-     */
+    /// <summary>
+    /// ParameterFactory wrapper for HasPassengers ContractParameter.
+    /// </summary>
     public class HasPassengersFactory : ParameterFactory
     {
+        protected int index;
         protected int count;
+        protected List<Kerbal> passengers;
 
         public override bool Load(ConfigNode configNode)
         {
             // Load base class
             bool valid = base.Load(configNode);
 
-            valid &= ConfigNodeUtil.ParseValue<int>(configNode, "count", ref count, this, 1, x => Validation.GE(x, 1));
+            valid &= ConfigNodeUtil.ParseValue<int>(configNode, "index", x => index = x, this, 0, x => Validation.GE(x, 0));
+            valid &= ConfigNodeUtil.ParseValue<int>(configNode, "count", x => count = x, this, 0, x => Validation.GE(x, 0));
+            valid &= ConfigNodeUtil.ParseValue<List<Kerbal>>(configNode, "kerbal", x => passengers = x, this, new List<Kerbal>());
 
             return valid;
         }
 
         public override ContractParameter Generate(Contract contract)
         {
-            return new HasPassengers(title, count);
+            if (passengers.Count() > 0)
+            {
+                return new HasPassengers(title, passengers.Select<Kerbal, ProtoCrewMember>(k => k.pcm));
+            }
+            else
+            {
+                return new HasPassengers(title, index, count);
+            }
         }
     }
 }

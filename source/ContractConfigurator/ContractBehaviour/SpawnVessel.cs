@@ -6,6 +6,7 @@ using UnityEngine;
 using KSP;
 using Contracts;
 using ContractConfigurator;
+using ContractConfigurator.ExpressionParser;
 
 namespace ContractConfigurator.Behaviour
 {
@@ -38,7 +39,7 @@ namespace ContractConfigurator.Behaviour
             public Orbit orbit = null;
             public double latitude = 0.0;
             public double longitude = 0.0;
-            public double altitude = 0.0;
+            public double? altitude = null;
             public bool landed = false;
             public bool owned = false;
             public List<CrewData> crew = new List<CrewData>();
@@ -95,61 +96,74 @@ namespace ContractConfigurator.Behaviour
             SpawnVessel spawnVessel = new SpawnVessel();
 
             bool valid = true;
-            foreach (ConfigNode child in configNode.GetNodes("VESSEL"))
+            int index = 0;
+            foreach (ConfigNode child in ConfigNodeUtil.GetChildNodes(configNode, "VESSEL"))
             {
-                VesselData vessel = new VesselData();
-
-                // Get name
-                if (child.HasValue("name"))
+                DataNode dataNode = new DataNode("VESSEL_" + index++, factory.dataNode, factory);
+                try
                 {
-                    vessel.name = child.GetValue("name");
-                }
+                    ConfigNodeUtil.SetCurrentDataNode(dataNode);
 
-                // Get paths
-                vessel.craftURL = ConfigNodeUtil.ParseValue<string>(child, "craftURL");
-                vessel.flagURL = ConfigNodeUtil.ParseValue<string>(child, "flagURL", (string)null);
-                vessel.vesselType = ConfigNodeUtil.ParseValue<VesselType>(child, "vesselType", VesselType.Ship);
+                    VesselData vessel = new VesselData();
 
-                // Get celestial body
-                valid &= ConfigNodeUtil.ParseValue<CelestialBody>(child, "targetBody", ref vessel.body, factory, defaultBody, Validation.NotNull);
-
-                // Get orbit
-                valid &= ConfigNodeUtil.ValidateMandatoryChild(child, "ORBIT", factory);
-                vessel.orbit = new OrbitSnapshot(child.GetNode("ORBIT")).Load();
-                vessel.orbit.referenceBody = vessel.body;
-
-                // Get landed stuff
-                if (child.HasValue("lat") && child.HasValue("lon") && child.HasValue("alt"))
-                {
-                    valid &= ConfigNodeUtil.ParseValue<double>(child, "lat", ref vessel.latitude, factory);
-                    valid &= ConfigNodeUtil.ParseValue<double>(child, "lon", ref vessel.longitude, factory);
-                    valid &= ConfigNodeUtil.ParseValue<double>(child, "alt", ref vessel.altitude, factory);
-                    vessel.landed = true;
-                }
-
-                // Get additional flags
-                valid &= ConfigNodeUtil.ParseValue<bool>(child, "owned", ref vessel.owned, factory, false);
-
-                // Handle the CREW nodes
-                foreach (ConfigNode crewNode in child.GetNodes("CREW"))
-                {
-                    int count = 1;
-                    valid &= ConfigNodeUtil.ParseValue<int>(crewNode, "count", ref count, factory, 1);
-                    for (int i = 0; i < count; i++)
+                    // Get name
+                    if (child.HasValue("name"))
                     {
-                        CrewData cd = new CrewData();
-
-                        // Read crew details
-                        valid &= ConfigNodeUtil.ParseValue<string>(crewNode, "name", ref cd.name, factory, (string)null);
-                        valid &= ConfigNodeUtil.ParseValue<bool>(crewNode, "addToRoster", ref cd.addToRoster, factory, true);
-
-                        // Add the record
-                        vessel.crew.Add(cd);
+                        vessel.name = child.GetValue("name");
                     }
-                }
 
-                // Add to the list
-                spawnVessel.vessels.Add(vessel);
+                    // Get paths
+                    vessel.craftURL = ConfigNodeUtil.ParseValue<string>(child, "craftURL");
+                    vessel.flagURL = ConfigNodeUtil.ParseValue<string>(child, "flagURL", (string)null);
+                    vessel.vesselType = ConfigNodeUtil.ParseValue<VesselType>(child, "vesselType", VesselType.Ship);
+
+                    // Get celestial body
+                    valid &= ConfigNodeUtil.ParseValue<CelestialBody>(child, "targetBody", x => vessel.body = x, factory, defaultBody, Validation.NotNull);
+
+                    // Get landed stuff
+                    if (child.HasValue("lat") && child.HasValue("lon"))
+                    {
+                        valid &= ConfigNodeUtil.ParseValue<double>(child, "lat", x => vessel.latitude = x, factory);
+                        valid &= ConfigNodeUtil.ParseValue<double>(child, "lon", x => vessel.longitude = x, factory);
+                        valid &= ConfigNodeUtil.ParseValue<double?>(child, "alt", x => vessel.altitude = x, factory, (double?)null);
+                        vessel.landed = true;
+                    }
+                    // Get orbit
+                    else
+                    {
+                        valid &= ConfigNodeUtil.ValidateMandatoryChild(child, "ORBIT", factory);
+                        vessel.orbit = new OrbitSnapshot(ConfigNodeUtil.GetChildNode(child, "ORBIT")).Load();
+                        vessel.orbit.referenceBody = vessel.body;
+                    }
+
+                    // Get additional flags
+                    valid &= ConfigNodeUtil.ParseValue<bool>(child, "owned", x => vessel.owned = x, factory, false);
+
+                    // Handle the CREW nodes
+                    foreach (ConfigNode crewNode in ConfigNodeUtil.GetChildNodes(child, "CREW"))
+                    {
+                        int count = 1;
+                        valid &= ConfigNodeUtil.ParseValue<int>(crewNode, "count", x => count = x, factory, 1);
+                        for (int i = 0; i < count; i++)
+                        {
+                            CrewData cd = new CrewData();
+
+                            // Read crew details
+                            valid &= ConfigNodeUtil.ParseValue<string>(crewNode, "name", x => cd.name = x, factory, (string)null);
+                            valid &= ConfigNodeUtil.ParseValue<bool>(crewNode, "addToRoster", x => cd.addToRoster = x, factory, true);
+
+                            // Add the record
+                            vessel.crew.Add(cd);
+                        }
+                    }
+
+                    // Add to the list
+                    spawnVessel.vessels.Add(vessel);
+                }
+                finally
+                {
+                    ConfigNodeUtil.SetCurrentDataNode(factory.dataNode);
+                }
             }
 
             return valid ? spawnVessel : null;
@@ -244,6 +258,21 @@ namespace ContractConfigurator.Behaviour
                         break;
                     }
                 }
+
+                // Set additional info for landed kerbals
+                if (vesselData.landed)
+                {
+                    if (vesselData.altitude == null)
+                    {
+                        vesselData.altitude = LocationUtil.TerrainHeight(vesselData.latitude, vesselData.longitude, vesselData.body);
+                    }
+
+                    Vector3d pos = vesselData.body.GetWorldSurfacePosition(vesselData.latitude, vesselData.longitude, vesselData.altitude.Value);
+
+                    vesselData.orbit = new Orbit(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, vesselData.body);
+                    vesselData.orbit.UpdateFromStateVectors(pos, vesselData.body.getRFrmVel(pos), vesselData.body, Planetarium.GetUniversalTime());
+                    LoggingUtil.LogDebug(this, "vesselData generated, orbit = " + vesselData.orbit);
+                }
                 
                 // Create a dummy ProtoVessel, we will use this to dump the parts to a config node.
                 // We can't use the config nodes from the .craft file, because they are in a
@@ -311,6 +340,26 @@ namespace ContractConfigurator.Behaviour
                     protoVesselNode.SetValue("lon", vesselData.longitude.ToString());
                     protoVesselNode.SetValue("alt", vesselData.altitude.ToString());
                     protoVesselNode.SetValue("landedAt", vesselData.body.name);
+
+                    // Figure out the additional heigh to subtract
+                    float lowest = float.MaxValue;
+                    foreach (Part p in shipConstruct.parts)
+                    {
+                        foreach (Collider collider in p.GetComponentsInChildren<Collider>())
+                        {
+                            if (collider.gameObject.layer != 21 && collider.enabled)
+                            {
+                                lowest = Mathf.Min(lowest, collider.bounds.min.y);
+                            }
+                        }
+                    }
+
+                    // Figure out the surface height and rotation
+                    Vector3d norm = vesselData.body.GetRelSurfaceNVector(vesselData.latitude, vesselData.longitude);
+                    Quaternion rotation = Quaternion.FromToRotation(Vector3.forward, Vector3.up) *
+                        Quaternion.LookRotation(new Vector3((float)norm.x, (float)norm.y, (float)norm.z));
+                    protoVesselNode.SetValue("hgt", (shipConstruct.parts[0].localRoot.attPos0.y - lowest).ToString());
+                    protoVesselNode.SetValue("rot", KSPUtil.WriteQuaternion(rotation));
                 }
 
                 // Add vessel to the game
@@ -328,7 +377,7 @@ namespace ContractConfigurator.Behaviour
 
         protected override void OnSave(ConfigNode configNode)
         {
-            base.OnLoad(configNode);
+            base.OnSave(configNode);
             configNode.AddValue("vesselsCreated", vesselsCreated);
             
             foreach (VesselData vd in vessels)
@@ -346,13 +395,19 @@ namespace ContractConfigurator.Behaviour
                 child.AddValue("body", vd.body.name);
                 child.AddValue("lat", vd.latitude);
                 child.AddValue("lon", vd.longitude);
-                child.AddValue("alt", vd.altitude);
+                if (vd.altitude != null)
+                {
+                    child.AddValue("alt", vd.altitude);
+                }
                 child.AddValue("landed", vd.landed);
                 child.AddValue("owned", vd.owned);
 
-                ConfigNode orbitNode = new ConfigNode("ORBIT");
-                new OrbitSnapshot(vd.orbit).Save(orbitNode);
-                child.AddNode(orbitNode);
+                if (vd.orbit != null)
+                {
+                    ConfigNode orbitNode = new ConfigNode("ORBIT");
+                    new OrbitSnapshot(vd.orbit).Save(orbitNode);
+                    child.AddNode(orbitNode);
+                }
 
                 // Add crew data
                 foreach (CrewData cd in vd.crew)
@@ -389,11 +444,14 @@ namespace ContractConfigurator.Behaviour
                 vd.body = ConfigNodeUtil.ParseValue<CelestialBody>(child, "body");
                 vd.latitude = ConfigNodeUtil.ParseValue<double>(child, "lat");
                 vd.longitude = ConfigNodeUtil.ParseValue<double>(child, "lon");
-                vd.altitude = ConfigNodeUtil.ParseValue<double>(child, "alt");
+                vd.altitude = ConfigNodeUtil.ParseValue<double?>(child, "alt", (double?)null);
                 vd.landed = ConfigNodeUtil.ParseValue<bool>(child, "landed");
                 vd.owned = ConfigNodeUtil.ParseValue<bool>(child, "owned");
 
-                vd.orbit = new OrbitSnapshot(child.GetNode("ORBIT")).Load();
+                if (child.HasNode("ORBIT"))
+                {
+                    vd.orbit = new OrbitSnapshot(child.GetNode("ORBIT")).Load();
+                }
 
                 // Load crew data
                 foreach (ConfigNode crewNode in child.GetNodes("CREW"))
@@ -521,14 +579,14 @@ namespace ContractConfigurator.Behaviour
             return node;
         }
 
-        public string GetKerbalName(int index)
+        public ProtoCrewMember GetKerbal(int index)
         {
             int current = index;
             foreach (VesselData vd in vessels)
             {
                 if (current < vd.crew.Count)
                 {
-                    return vd.crew[current].name;
+                    return HighLogic.CurrentGame.CrewRoster.AllKerbals().Where(cm => cm.name == vd.crew[current].name).First();
                 }
                 current -= vd.crew.Count;
             }

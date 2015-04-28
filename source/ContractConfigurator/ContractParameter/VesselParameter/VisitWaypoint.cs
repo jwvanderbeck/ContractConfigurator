@@ -16,7 +16,6 @@ namespace ContractConfigurator.Parameters
     /// </summary>
     public class VisitWaypoint : VesselParameter
     {
-        protected string title { get; set; }
         protected int waypointIndex { get; set; }
         protected Waypoint waypoint { get; set; }
         protected double distance { get; set; }
@@ -31,9 +30,8 @@ namespace ContractConfigurator.Parameters
         }
 
         public VisitWaypoint(int waypointIndex, double distance, string title)
-            : base()
+            : base(title)
         {
-            this.title = title;
             this.distance = distance;
             this.waypointIndex = waypointIndex;
         }
@@ -62,7 +60,6 @@ namespace ContractConfigurator.Parameters
         protected override void OnParameterSave(ConfigNode node)
         {
             base.OnParameterSave(node);
-            node.AddValue("title", title);
             node.AddValue("distance", distance);
             node.AddValue("waypointIndex", waypointIndex);
         }
@@ -70,7 +67,6 @@ namespace ContractConfigurator.Parameters
         protected override void OnParameterLoad(ConfigNode node)
         {
             base.OnParameterLoad(node);
-            title = node.GetValue("title");
             distance = Convert.ToDouble(node.GetValue("distance"));
             waypointIndex = Convert.ToInt32(node.GetValue("waypointIndex"));
         }
@@ -159,53 +155,10 @@ namespace ContractConfigurator.Parameters
             }
 
             // Calculate the distance
-            double actualDistance = GetDistanceToWaypoint(vessel, waypoint);
+            double actualDistance = WaypointUtil.GetDistanceToWaypoint(vessel, waypoint, ref height);
 
             LoggingUtil.LogVerbose(this, "Distance to waypoint '" + waypoint.name + "': " + actualDistance);
             return actualDistance <= distance;
-        }
-
-
-        /// <summary>
-        /// Gets the  distance in meters from the activeVessel to the given waypoint.
-        /// </summary>
-        /// <param name="wpd">Activated waypoint</param>
-        /// <returns>Distance in meters</returns>
-        protected double GetDistanceToWaypoint(Vessel vessel, Waypoint waypoint)
-        {
-            CelestialBody celestialBody = vessel.mainBody;
-
-            // Figure out the terrain height
-            if (height == double.MaxValue)
-            {
-                double latRads = Math.PI / 180.0 * waypoint.latitude;
-                double lonRads = Math.PI / 180.0 * waypoint.longitude;
-                Vector3d radialVector = new Vector3d(Math.Cos(latRads) * Math.Cos(lonRads), Math.Sin(latRads), Math.Cos(latRads) * Math.Sin(lonRads));
-                height = Math.Max(celestialBody.pqsController.GetSurfaceHeight(radialVector) - celestialBody.pqsController.radius, 0.0);
-            }
-
-            // Use the haversine formula to calculate great circle distance.
-            double sin1 = Math.Sin(Math.PI / 180.0 * (vessel.latitude - waypoint.latitude) / 2);
-            double sin2 = Math.Sin(Math.PI / 180.0 * (vessel.longitude - waypoint.longitude) / 2);
-            double cos1 = Math.Cos(Math.PI / 180.0 * waypoint.latitude);
-            double cos2 = Math.Cos(Math.PI / 180.0 * vessel.latitude);
-
-            double lateralDist = 2 * (celestialBody.Radius + height + waypoint.altitude) *
-                Math.Asin(Math.Sqrt(sin1 * sin1 + cos1 * cos2 * sin2 * sin2));
-            double heightDist = Math.Abs(waypoint.altitude + height - vessel.terrainAltitude);
-
-            if (heightDist <= lateralDist / 2.0)
-            {
-                return lateralDist;
-            }
-            else
-            {
-                // Get the ratio to use in our formula
-                double x = (heightDist - lateralDist / 2.0) / lateralDist;
-
-                // x / (x + 1) starts at 0 when x = 0, and increases to 1
-                return (x / (x + 1)) * heightDist + lateralDist;
-            }
         }
     }
 }

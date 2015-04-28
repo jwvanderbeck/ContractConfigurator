@@ -14,27 +14,22 @@ namespace ContractConfigurator.Parameters
     /// </summary>
     public class Sequence : ContractConfiguratorParameter
     {
-        protected string title { get; set; }
         protected List<string> hiddenParameters;
 
         private bool paramRemoved = false;
         private bool firstRun = false;
+        private bool failWhenCompleteOutOfOrder = false;
 
         public Sequence()
-            : base()
+            : base(null)
         {
         }
 
-        public Sequence(List<string> hiddenParameters, string title)
-            : base()
+        public Sequence(List<string> hiddenParameters, bool failWhenCompleteOutOfOrder, string title)
+            : base(title ?? "Complete the following in order")
         {
-            this.title = title != null && title != "" ? title : "Complete the following in order";
             this.hiddenParameters = hiddenParameters;
-        }
-
-        protected override string GetTitle()
-        {
-            return title;
+            this.failWhenCompleteOutOfOrder = failWhenCompleteOutOfOrder;
         }
 
         protected override string GetHashString()
@@ -44,17 +39,17 @@ namespace ContractConfigurator.Parameters
 
         protected override void OnParameterSave(ConfigNode node)
         {
-            node.AddValue("title", title);
             foreach (string param in hiddenParameters)
             {
                 node.AddValue("hiddenParameter", param);
             }
+            node.AddValue("failWhenCompleteOutOfOrder", failWhenCompleteOutOfOrder);
         }
 
         protected override void OnParameterLoad(ConfigNode node)
         {
-            title = node.GetValue("title");
             hiddenParameters = ConfigNodeUtil.ParseValue<List<string>>(node, "hiddenParameter", new List<string>());
+            failWhenCompleteOutOfOrder = ConfigNodeUtil.ParseValue<bool?>(node, "failWhenCompleteOutOfOrder", (bool?)false).Value;
         }
 
         protected override void OnUpdate()
@@ -78,8 +73,7 @@ namespace ContractConfigurator.Parameters
                 for (int i = 0; i < ParameterCount; i++)
                 {
                     ContractParameter param = GetParameter(i);
-                    // Found an incomplete parameter - okay as long as we don't later find a completed
-                    // one - which would be an out of order error.
+                    // Found an incomplete parameter
                     if (param.State != ParameterState.Complete)
                     {
                         foundNotComplete = true;
@@ -92,7 +86,7 @@ namespace ContractConfigurator.Parameters
                         }
                     }
                     // We found a complete parameter after finding an incomplete one - failure condition
-                    else if (foundNotComplete)
+                    else if (foundNotComplete && failWhenCompleteOutOfOrder)
                     {
                         SetState(ParameterState.Failed);
                         return;

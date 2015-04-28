@@ -14,7 +14,6 @@ namespace ContractConfigurator.Parameters
     /// </summary>
     public class HasResource : VesselParameter
     {
-        protected string title { get; set; }
         protected PartResourceDefinition resource { get; set; }
         protected double minQuantity { get; set; }
         protected double maxQuantity { get; set; }
@@ -28,11 +27,8 @@ namespace ContractConfigurator.Parameters
         }
 
         public HasResource(PartResourceDefinition resource, double minQuantity = 0.01, double maxQuantity = double.MaxValue, string title = null)
-            : base()
+            : base(title)
         {
-            // Vessels should fail if they don't meet the part conditions
-            failWhenUnmet = true;
-
             this.resource = resource;
             this.minQuantity = minQuantity;
             this.maxQuantity = maxQuantity;
@@ -67,15 +63,9 @@ namespace ContractConfigurator.Parameters
             }
         }
 
-        protected override string GetTitle()
-        {
-            return title;
-        }
-
         protected override void OnParameterSave(ConfigNode node)
         {
             base.OnParameterSave(node);
-            node.AddValue("title", title);
             node.AddValue("minQuantity", minQuantity);
             if (maxQuantity != double.MaxValue)
             {
@@ -87,7 +77,6 @@ namespace ContractConfigurator.Parameters
         protected override void OnParameterLoad(ConfigNode node)
         {
             base.OnParameterLoad(node);
-            title = node.GetValue("title");
             minQuantity = Convert.ToDouble(node.GetValue("minQuantity"));
             maxQuantity = node.HasValue("maxQuantity") ? Convert.ToDouble(node.GetValue("maxQuantity")) : double.MaxValue;
             resource = ConfigNodeUtil.ParseValue<PartResourceDefinition>(node, "resource");
@@ -121,15 +110,7 @@ namespace ContractConfigurator.Parameters
         protected override bool VesselMeetsCondition(Vessel vessel)
         {
             LoggingUtil.LogVerbose(this, "Checking VesselMeetsCondition: " + vessel.id);
-            double quantity = 0.0;
-            foreach (Part part in vessel.Parts)
-            {
-                PartResource pr = part.Resources[resource.name];
-                if (pr != null)
-                {
-                    quantity += pr.amount;
-                }
-            }
+            double quantity = vessel.ResourceQuantity(resource);
             return quantity >= minQuantity && quantity <= maxQuantity;
         }
     }

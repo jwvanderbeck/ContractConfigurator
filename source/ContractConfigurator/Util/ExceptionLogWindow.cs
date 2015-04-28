@@ -15,13 +15,15 @@ namespace ContractConfigurator
             PARAMETER_LOAD,
             CONTRACT_SAVE,
             CONTRACT_LOAD,
+            SCENARIO_MODULE_SAVE,
+            SCENARIO_MODULE_LOAD,
             OTHER,
         }
 
         private static string situationString;
         private static string actionString;
         private static Exception displayedException = null;
-        private static Rect windowPos = new Rect(Screen.width / 2.0f - 300.0f, Screen.height / 2.0f - 120.0f, 600f, 240f);
+        private static Rect windowPos = new Rect(Screen.width / 2.0f - 300.0f, Screen.height / 2.0f - 240.0f, 600f, 480f);
         private static Vector2 scrollPosition;
 
         public static void DisplayFatalException(ExceptionSituation situation, Exception e, params object[] args)
@@ -43,6 +45,14 @@ namespace ContractConfigurator
                 case ExceptionSituation.CONTRACT_LOAD:
                     situationString = String.Format("while loading contract contract '{0}'", args);
                     actionString = "The contract data was not correctly loaded.  Avoid saving your game and backup your save file immediately if you wish to prevent contract loss!";
+                    break;
+                case ExceptionSituation.SCENARIO_MODULE_SAVE:
+                    situationString = String.Format("while saving ScenarioModule '{0}'", args);
+                    actionString = "The ScenarioModule data was not correctly saved - reloading the save may result in further errors.";
+                    break;
+                case ExceptionSituation.SCENARIO_MODULE_LOAD:
+                    situationString = String.Format("while loading ScenarioModule '{0}'", args);
+                    actionString = "The ScenarioModule data was not correctly loaded.  Avoid saving your game and backup your save file immediately if you wish to prevent save game data loss!";
                     break;
                 default:
                     situationString = "while performing an unspecified operation";

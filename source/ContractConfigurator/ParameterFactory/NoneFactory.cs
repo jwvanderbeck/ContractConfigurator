@@ -6,17 +6,18 @@ using UnityEngine;
 using KSP;
 using Contracts;
 using Contracts.Parameters;
+using ContractConfigurator.Parameters;
 
 namespace ContractConfigurator
 {
-    /*
-     * ParameterFactory wrapper for LaunchVessel ContractParameter.
-     */
-    public class LaunchVesselFactory : ParameterFactory
+    /// <summary>
+    /// ParameterFactory wrapper for None ContractParameter.
+    /// </summary>
+    public class NoneFactory : ParameterFactory
     {
         public override ContractParameter Generate(Contract contract)
         {
-            return new LaunchVessel();
+            return new None(title);
         }
     }
 }

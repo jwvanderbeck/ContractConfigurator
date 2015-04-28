@@ -1,3 +1,150 @@
+Contract Configurator 0.8.1
+- Fix display of dynamic text (was broken by KSP 1.0).
+
+Contract Configurator 1.0.0
+- Various fixes related to KSP 1.0.
+- Deprecated parameters removed from stock (some will get replacements in a future version of Contract Configurator).
+    - AltitudeRecord
+    - LaunchVessel
+- Added new AtLeast and AtMost set parameters.
+- Added new None set parameter.
+- Improve validation rules for unknown attributes/child nodes (helps modders track down issues more easily).
+- Fix issue when reloading contracts within a hierarchy of contract groups.
+- Fix issue when loading a save game with RemoteTech when a previously installed planet pack is uninstalled (thanks Svm420 and magico13).
+- Pop up a warning dialog when a ScenarioModule fails to load (and prevent other ScenarioModules from also failing).
+- Improve error messaging when failing on loading types from assemblies (thanks Vladthemad).
+- Fix default value of index for VisitWaypoint parameter (thanks AlphaAsh).
+Contract Configurator 0.7.15
+- Fix for re-loading passengers in tourism contracts (thanks karki and others).
+
+Contract Configurator 0.7.14
+- Expressions now work in child nodes (for WaypointGenerator and other behaviours that support it).
+- Fix issues with fairness when generating contracts (should now give appropriate consideration to all contract packs).
+- Fix errors in Tourism contract pack introduced by 0.7.13.
+- Minor bug fixes.
+
+Contract Configurator 0.7.13
+- Fix exception when loading types from assemblies that have been improperly compiled (thanks SpacedInvader).
+
+Contract Configurator 0.7.12
+- Fix issue when loading part names with non-standard characters (thanks tattagreis).
+- Fix issue with using custom behaviours.
+- Can now provide multiple techs, parts and part modules in PartModuleUnlocked, PartUnlocked and TechResearched requirements.
+- TechResearched requirement now supports selecting techs by specifying parts.
+- WaypointGenerator now supports a hidden attribute for waypoints.
+- Hash contract configuration details, and cancel offered contracts if the hashed values do not match.  This prevents old contracts from staying on offer when a contract pack is upgraded.
+- Improved handling of invalid vessel identifiers.
+- SpawnVessel now properly supports landed vessels.
+- Support for hierarchies of contract groups.
+- Fixes for Expression requirement.
+- Minor bug fixes.
+
+Contract Configurator 0.7.11
+- Fixed possible NRE issue when loading VesselParameterGroup (thanks Monopropellant & FreakyHydra).
+- Fix to undocking issue where KSP physics goes nuts.
+
+Contract Configurator 0.7.10
+- Fixes to vessel hashing to work with unloaded vessels.  Fixes some issues with duration timers resetting.
+- Fix SCANsat issue where number instead of name of scan gets displayed.
+- Expressions support 'null' as a value.
+- PlantFlag no longer uses the stock parameter and is now a VesselParameter.  Closes silly exploits.
+
+Contract Configurator 0.7.9
+- Add support for Part (AvailablePart) in expressions.
+- Fix to passengers not being seated when the capsule crew capacity is bigger than the number of seats in the IVA (thanks SpaceNomand).
+- More fixes to vessel tracking (fixes issues with RemoteTech contract pack).  Thanks to Invader Myk.
+- Minor bug fixes.
+
+Contract Configurator 0.7.8
+- More fixes for docking/undocking and vessel tracking (thanks metl).
+- Fixed problem where requirement status was no longer showing up in debug menu.
+- Minor bug fixes.
+
+Contract Configurator 0.7.7
+- Hotfix for loading saves from 0.7.4 or older (thanks SpaceNomad).
+
+Contract Configurator 0.7.6
+- Fix a save load issue with the Sequence parameter in 0.7.5 (thanks superm18).
+
+Contract Configurator 0.7.5
+- Possible fix for duration counters resetting (thanks dorin6565 and many others).
+- Fix for HasCrew with count > 0 (thanks Yemo).
+- Fix for undefined vessels showing up in Tourism contracts (thanks Kaa253).
+- Improvements to tracking across docked vessels.
+- SpawnPassengers now only spawns passengers on Kerbin (closes EPL exploit).
+- Sequence parameter no longer fails if child parameters complete out of order.
+- Added hideChildren attribute to contract parameters to hide children.
+- Added requiredValue attribute to DATA nodes.
+- Added CelestialBody(), Kerbal() and Vessel() functions to expressions.
+- Added resources to expressions.
+- Debug window now highlights items with warnings in yellow.
+- Obsolete EnterOrbit.
+- Obsolete EnterSOI.
+- Obsolete LandOnBody.
+- Obsolete VesselHasVisited.
+- Minor bug fixes.
+
+Contract Configurator 0.7.4
+- Fix for unmanned vessels in HasCrew.
+- Fix to check both vessels when undocking in HasCrew (thanks severedsolo).
+- Fix for Kerbals spawning at 0 latitude, 0 longitude (thanks Wiseman).
+- Support for new DATA node for storing arbitrary values for use in expressions.
+- Improvements to SpawnPassengers, including an upper limit to the number of Kerbals it will spawn before reusing them (to keep the crew roster manageable).
+- WaypointGenerator now supports both min and max values for RANDOM_WAYPOINT_NEAR.
+- Add parameter attribute to WaypointGenerator to make waypoints dependent on a parameter.
+- Improved output messages when reloading contracts through the debug menu.
+- Debug window now contains details of contract groups.
+- Reloading in debug window no longer causes duplicate contracts to be allowed.
+- Add close icon to debug menu.
+- Minor bug fixes.
+
+Contract Configurator 0.7.3
+- Fix problems with VesselDestroyed (big thanks to linuxgurugamer for his patience on this one).
+- Fix HasCrew for unmanned check.  Improved parameter text slightly.
+- Fix exceptions when planting flag (thanks Zach9236).
+- Removing contracts (ie. uninstalling a contract pack) no longer causes exceptions in existing save games.
+
+Contract Configurator 0.7.2
+- Fix zero orbit period bug (thanks SpaceNomad).
+
+Contract Configurator 0.7.1
+- Better support for spawning landed Kerbals in SpawnKerbal.
+- SpawnKerbal now supports PQS offsets.
+- HasCrew improvements: moved to delegate system, add support for requiring a specific Kerbal.
+- Added support for Duration datatype in expressions.
+- Expression support for SpawnKerbal and WaypointGenerator behaviours.
+- Improvements to location debug window.
+- Support for notes in most contract parameters.
+- Weight in contract types now only applies within a contract group, and all contract groups are given equal preference.  This means that one contract group (or contract pack) can't cause contract starvation in another group.
+- Fix NullReferenceException when using TextGen without an agent specified (thanks AppoloFunghi).
+- Fix broken completeInSequence attribute.
+- Minor bug fixes.
+
+Contract Configurator 0.7.0
+- Support for expressions in config nodes.
+    - All config node attributes can now contain expressions (see wiki for syntax details).
+    - Added special expression function/methods for Vessel
+    - Added special expression function/methods for CelestialBody
+    - Added special expression function/methods for Kerbal (ProtoCrewMember)
+    - Added special expression function/methods for Lists
+    - Added special expression function/methods for Enumerations
+- New debugging window feature - contract balancing mode.
+- Added HasCrewCapacity parameter.
+- Added VesseLDestroyed parameter.
+- Added SpawnPassenger behaviour.
+- Added version check to contract groups.
+- Major changes to CollectScience parameter.
+- WaypointGenerate now supports a PQS offset - allows setting waypoint using a special offset from the PQSCity location.
+- Added minTerrainAltitude and maxTerrainAltitude to ReachState.
+- Fixed HasAntenna to work with omnis without having activeVessel attribute set (thanks Eiktyrner).
+- Clean up "Input is null" warning messages from stock.
+- Lots and lots of minor bug fixes.
+
+Contract Configurator 0.6.7
+- Added support for completeInSequence attribute (all parameters).
+- The state of vessel parameters may now be "transferred" via EVA Kerbals.  This allows a ship to land on the Mun, have the Kerbal EVA from the ship to a new ship, and have the new ship still complete the "land on Mun" parameter.
+- Minor bug fixes.
+
 Contract Configurator 0.6.6
 - Changed to MIT license.
 - Performance fixes for stock contracts app (mainly affects contracts with lots and lots of parameters.

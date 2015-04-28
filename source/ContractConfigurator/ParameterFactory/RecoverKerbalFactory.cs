@@ -6,60 +6,35 @@ using UnityEngine;
 using KSP;
 using Contracts;
 using Contracts.Parameters;
+using ContractConfigurator.Parameters;
 using ContractConfigurator.Behaviour;
 
 namespace ContractConfigurator
 {
-    /*
-     * ParameterFactory wrapper for RecoverKerbal ContractParameter.
-     */
+    /// <summary>
+    /// ParameterFactory wrapper for RecoverKerbal ContractParameter.
+    /// </summary>
     public class RecoverKerbalFactory : ParameterFactory
     {
-        protected string kerbal;
+        protected List<Kerbal> kerbal;
         protected int index;
+        protected int count;
 
         public override bool Load(ConfigNode configNode)
         {
             // Load base class
             bool valid = base.Load(configNode);
 
-            valid &= ConfigNodeUtil.ParseValue<string>(configNode, "kerbal", ref kerbal, this, (string)null);
-            valid &= ConfigNodeUtil.ParseValue<int>(configNode, "index", ref index, this, -1);
-            valid &= ConfigNodeUtil.AtLeastOne(configNode, new string[] { "kerbal", "index" }, this);
-
-            // Manually validate, since the default is technically invalid
-            if (kerbal == null)
-            {
-                valid &= Validation.GE(index, 0);
-            }
+            valid &= ConfigNodeUtil.ParseValue<List<Kerbal>>(configNode, "kerbal", x => kerbal = x, this, new List<Kerbal>());
+            valid &= ConfigNodeUtil.ParseValue<int>(configNode, "index", x => index = x, this, 0, x => Validation.GE(x, 0));
+            valid &= ConfigNodeUtil.ParseValue<int>(configNode, "count", x => count = x, this, 0, x => Validation.GE(x, 0));
             
             return valid;
         }
 
         public override ContractParameter Generate(Contract contract)
         {
-            RecoverKerbal contractParam = new RecoverKerbal(title);
-
-            // Add the kerbal
-            string kerbalName;
-            if (kerbal != null)
-            {
-                kerbalName = kerbal;
-            }
-            else
-            {
-                kerbalName = ((ConfiguredContract)contract).GetSpawnedKerbal(index);
-            }
-
-            contractParam.AddKerbal(kerbalName);
-
-            // Get title
-            if (title == null)
-            {
-                contractParam.SetTitle(kerbalName + ": Recovered");
-            }
-
-            return contractParam;
+            return new RecoverKerbalCustom(kerbal.Select<Kerbal, ProtoCrewMember>(k => k.pcm), index, count, title);
         }
     }
 }

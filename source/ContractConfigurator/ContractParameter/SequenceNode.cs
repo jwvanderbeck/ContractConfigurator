@@ -10,22 +10,20 @@ using Contracts.Parameters;
 namespace ContractConfigurator.Parameters
 {
     /// <summary>
-    /// ContractParameter for use iwth the Sequence parameter.  Does not complete unless all
+    /// ContractParameter for use with the Sequence parameter.  Does not complete unless all
     /// previous items in the sequence have completed.
     /// </summary>
+    [Obsolete("Obsolete as of Contract Configurator 0.6.7, please use the completeInSequence attribute instead.")]
     public class SequenceNode : ContractConfiguratorParameter
     {
-        protected string title { get; set; }
-
         public SequenceNode()
             : this(null)
         {
         }
 
         public SequenceNode(string title)
-            : base()
+            : base(title)
         {
-            this.title = title;
         }
 
         protected override string GetTitle()
@@ -62,12 +60,10 @@ namespace ContractConfigurator.Parameters
 
         protected override void OnParameterSave(ConfigNode node)
         {
-            node.AddValue("title", title);
         }
 
         protected override void OnParameterLoad(ConfigNode node)
         {
-            title = node.GetValue("title");
         }
 
         /// <summary>
@@ -75,7 +71,7 @@ namespace ContractConfigurator.Parameters
         /// in the sequence have been completed.
         /// </summary>
         /// <returns>True if the parameter is ready to complete.</returns>
-        private bool ReadyToComplete()
+        private new bool ReadyToComplete()
         {
             // Go through the parent's parameters
             for (int i = 0; i < Parent.ParameterCount; i++)

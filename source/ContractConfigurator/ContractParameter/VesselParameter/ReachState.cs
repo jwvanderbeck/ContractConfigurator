@@ -14,35 +14,37 @@ namespace ContractConfigurator.Parameters
     /// </summary>
     public class ReachState : VesselParameter
     {
-        protected string title { get; set; }
         protected CelestialBody targetBody { get; set; }
         protected string biome { get; set; }
         protected Vessel.Situations? situation { get; set; }
         protected float minAltitude { get; set; }
         protected float maxAltitude { get; set; }
+        protected float minTerrainAltitude { get; set; }
+        protected float maxTerrainAltitude { get; set; }
         protected double minSpeed { get; set; }
         protected double maxSpeed { get; set; }
 
         private float lastUpdate = 0.0f;
         private const float UPDATE_FREQUENCY = 0.1f;
 
-        private Vessel.Situations[] landedSituations = new Vessel.Situations[] { Vessel.Situations.LANDED, Vessel.Situations.PRELAUNCH, Vessel.Situations.SPLASHED };
+        private static Vessel.Situations[] landedSituations = new Vessel.Situations[] { Vessel.Situations.LANDED, Vessel.Situations.PRELAUNCH, Vessel.Situations.SPLASHED };
 
         public ReachState()
-            : base()
+            : base(null)
         {
         }
 
         public ReachState(CelestialBody targetBody, string biome, Vessel.Situations? situation, float minAltitude, float maxAltitude,
-            double minSpeed, double maxSpeed, string title)
-            : base()
+            float minTerrainAltitude, float maxTerrainAltitude, double minSpeed, double maxSpeed, string title)
+            : base(title)
         {
-            this.title = title;
             this.targetBody = targetBody;
             this.biome = biome;
             this.situation = situation;
             this.minAltitude = minAltitude;
             this.maxAltitude = maxAltitude;
+            this.minTerrainAltitude = minTerrainAltitude;
+            this.maxTerrainAltitude = maxTerrainAltitude;
             this.minSpeed = minSpeed;
             this.maxSpeed = maxSpeed;
 
@@ -72,8 +74,8 @@ namespace ContractConfigurator.Parameters
             // Filter for celestial bodies
             if (targetBody != null)
             {
-                AddParameter(new ParameterDelegate<Vessel>("Destination: " + targetBody.PrintName(),
-                    v => v.mainBody == targetBody, true));
+                AddParameter(new ParameterDelegate<Vessel>("Destination: " + targetBody.theName,
+                    v => v.mainBody == targetBody));
             }
 
             // Filter for biome
@@ -107,6 +109,26 @@ namespace ContractConfigurator.Parameters
                 }
 
                 AddParameter(new ParameterDelegate<Vessel>(output, v => v.altitude >= minAltitude && v.altitude <= maxAltitude));
+            }
+
+            // Filter for terrain altitude
+            if (minTerrainAltitude != 0.0f || maxTerrainAltitude != float.MaxValue)
+            {
+                string output = "Altitude (terrain): ";
+                if (minTerrainAltitude == 0.0f)
+                {
+                    output += "Below " + maxTerrainAltitude.ToString("N0") + " m";
+                }
+                else if (maxTerrainAltitude == float.MaxValue)
+                {
+                    output += "Above " + minTerrainAltitude.ToString("N0") + " m";
+                }
+                else
+                {
+                    output += "Between " + minTerrainAltitude.ToString("N0") + " m and " + maxTerrainAltitude.ToString("N0") + " m";
+                }
+
+                AddParameter(new ParameterDelegate<Vessel>(output, v => v.altitude >= minTerrainAltitude && v.altitude <= maxTerrainAltitude));
             }
 
             // Filter for speed
@@ -166,12 +188,10 @@ namespace ContractConfigurator.Parameters
         protected override void OnParameterSave(ConfigNode node)
         {
             base.OnParameterSave(node);
-            node.AddValue("title", title);
             // Can't be null
             node.AddValue("targetBody", targetBody.name);
             node.AddValue("biome", biome);
 
-            // Adding null on situation breaks KSP
             if (situation != null)
             {
                 node.AddValue("situation", situation);
@@ -181,6 +201,12 @@ namespace ContractConfigurator.Parameters
             if (maxAltitude != float.MaxValue)
             {
                 node.AddValue("maxAltitude", maxAltitude);
+            }
+
+            node.AddValue("minTerrainAltitude", minTerrainAltitude);
+            if (maxTerrainAltitude != float.MaxValue)
+            {
+                node.AddValue("maxTerrainAltitude", maxTerrainAltitude);
             }
 
             node.AddValue("minSpeed", minSpeed);
@@ -193,12 +219,13 @@ namespace ContractConfigurator.Parameters
         protected override void OnParameterLoad(ConfigNode node)
         {
             base.OnParameterLoad(node);
-            title = node.GetValue("title");
             targetBody = ConfigNodeUtil.ParseValue<CelestialBody>(node, "targetBody", (CelestialBody)null);
-            biome = node.GetValue("biome");
+            biome = ConfigNodeUtil.ParseValue<string>(node, "biome");
             situation = ConfigNodeUtil.ParseValue<Vessel.Situations?>(node, "situation", (Vessel.Situations?)null);
             minAltitude = ConfigNodeUtil.ParseValue<float>(node, "minAltitude");
             maxAltitude = ConfigNodeUtil.ParseValue<float>(node, "maxAltitude", float.MaxValue);
+            minTerrainAltitude = ConfigNodeUtil.ParseValue<float>(node, "minTerrainAltitude", 0.0f);
+            maxTerrainAltitude = ConfigNodeUtil.ParseValue<float>(node, "maxTerrainAltitude", float.MaxValue);
             minSpeed = ConfigNodeUtil.ParseValue<double>(node, "minSpeed");
             maxSpeed = ConfigNodeUtil.ParseValue<double>(node, "maxSpeed", Double.MaxValue);
 

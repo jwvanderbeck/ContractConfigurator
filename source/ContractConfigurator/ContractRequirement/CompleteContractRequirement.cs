@@ -9,16 +9,16 @@ using Contracts;
 
 namespace ContractConfigurator
 {
-    /*
-     * ContractRequirement to provide requirement for player having completed other contracts.
-     */
+    /// <summary>
+    /// ContractRequirement to provide requirement for player having completed other contracts.
+    /// </summary>
     public class CompleteContractRequirement : ContractRequirement
     {
         protected string ccType;
         protected Type contractClass;
         protected uint minCount;
         protected uint maxCount;
-        protected double cooldown;
+        protected Duration cooldownDuration;
 
         public override bool Load(ConfigNode configNode)
         {
@@ -27,7 +27,7 @@ namespace ContractConfigurator
 
             // Get type
             string contractType = null;
-            valid &= ConfigNodeUtil.ParseValue<string>(configNode, "contractType", ref contractType, this);
+            valid &= ConfigNodeUtil.ParseValue<string>(configNode, "contractType", x => contractType = x, this);
             if (valid)
             {
                 if (ContractType.GetContractType(contractType) != null)
@@ -58,16 +58,9 @@ namespace ContractConfigurator
                 }
             }
 
-            valid &= ConfigNodeUtil.ParseValue<uint>(configNode, "minCount", ref minCount, this, 1);
-            valid &= ConfigNodeUtil.ParseValue<uint>(configNode, "maxCount", ref maxCount, this, UInt32.MaxValue);
-
-            // Get cooldown
-            string cooldownStr = null;
-            valid &= ConfigNodeUtil.ParseValue<string>(configNode, "cooldownDuration", ref cooldownStr, this, "");
-            if (cooldownStr != null)
-            {
-                cooldown = cooldownStr != "" ? DurationUtil.ParseDuration(cooldownStr) : 0.0;
-            }
+            valid &= ConfigNodeUtil.ParseValue<uint>(configNode, "minCount", x => minCount = x, this, 1);
+            valid &= ConfigNodeUtil.ParseValue<uint>(configNode, "maxCount", x => maxCount = x, this, UInt32.MaxValue);
+            valid &= ConfigNodeUtil.ParseValue<Duration>(configNode, "cooldownDuration", x => cooldownDuration = x, this, new Duration(0.0));
 
             return valid;
         }
@@ -102,8 +95,9 @@ namespace ContractConfigurator
             }
 
             // Check cooldown
-            if (cooldown > 0.0 && finished > 0 && lastFinished + cooldown > Planetarium.GetUniversalTime())
+            if (cooldownDuration.Value > 0.0 && finished > 0 && lastFinished + cooldownDuration.Value > Planetarium.GetUniversalTime())
             {
+                LoggingUtil.LogDebug(this, "Returning false due to cooldown for " + contractType.name);
                 return false;
             }
 

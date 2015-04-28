@@ -5,6 +5,8 @@ using System.Text;
 using UnityEngine;
 using KSP;
 using Contracts;
+using ContractConfigurator.ExpressionParser;
+using ContractConfigurator.Parameters;
 
 namespace ContractConfigurator
 {
@@ -18,7 +20,11 @@ namespace ContractConfigurator
         protected string name;
         protected string type;
         protected virtual ContractType contractType { get; set; }
-        protected CelestialBody targetBody;
+        protected CelestialBody _targetBody = null;
+        protected CelestialBody targetBody
+        {
+            get { return _targetBody ?? contractType.targetBody; }
+        }
         protected float rewardScience;
         protected float rewardReputation;
         protected float rewardFunds;
@@ -26,16 +32,21 @@ namespace ContractConfigurator
         protected float failureFunds;
         protected bool optional;
         protected bool? disableOnStateChange;
+        protected bool completeInSequence;
+        protected bool hideChildren;
         protected ParameterFactory parent = null;
-        protected virtual List<ParameterFactory> childNodes { get; set; }
-        protected virtual List<ContractRequirement> requirements { get; set; }
+        protected List<ParameterFactory> childNodes = new List<ParameterFactory>();
+        protected List<ContractRequirement> requirements = new List<ContractRequirement>();
         protected string title;
-        public string log = "";
+        protected string notes;
 
         public bool enabled = true;
+        public bool hasWarnings { get; set; }
         public virtual IEnumerable<ParameterFactory> ChildParameters { get { return childNodes; } }
         public virtual IEnumerable<ContractRequirement> ChildRequirements { get { return requirements; } }
-        public string config = "";
+        public string config { get; private set; }
+        public string log { get; private set; }
+        public DataNode dataNode { get; private set; }
 
         /// <summary>
         /// Loads the ParameterFactory from the given ConfigNode.  The base version performs the following:
@@ -56,50 +67,30 @@ namespace ContractConfigurator
         public virtual bool Load(ConfigNode configNode)
         {
             bool valid = true;
+            ConfigNodeUtil.SetCurrentDataNode(dataNode);
 
             // Get name and type
-            valid &= ConfigNodeUtil.ParseValue<string>(configNode, "type", ref type, this);
-            valid &= ConfigNodeUtil.ParseValue<string>(configNode, "name", ref name, this, type);
+            valid &= ConfigNodeUtil.ParseValue<string>(configNode, "type", x => type = x, this);
+            valid &= ConfigNodeUtil.ParseValue<string>(configNode, "name", x => name = x, this, type);
 
-            valid &= ConfigNodeUtil.ParseValue<CelestialBody>(configNode, "targetBody", ref targetBody, this, contractType.targetBody);
+            valid &= ConfigNodeUtil.ParseValue<CelestialBody>(configNode, "targetBody", x => _targetBody = x, this, (CelestialBody)null);
 
             // Load rewards
-            valid &= ConfigNodeUtil.ParseValue<float>(configNode, "rewardFunds", ref rewardFunds, this, 0.0f, x => Validation.GE(x, 0.0f));
-            valid &= ConfigNodeUtil.ParseValue<float>(configNode, "rewardReputation", ref rewardReputation, this, 0.0f, x => Validation.GE(x, 0.0f));
-            valid &= ConfigNodeUtil.ParseValue<float>(configNode, "rewardScience", ref rewardScience, this, 0.0f, x => Validation.GE(x, 0.0f));
-            valid &= ConfigNodeUtil.ParseValue<float>(configNode, "failureFunds", ref failureFunds, this, 0.0f, x => Validation.GE(x, 0.0f));
-            valid &= ConfigNodeUtil.ParseValue<float>(configNode, "failureReputation", ref failureReputation, this, 0.0f, x => Validation.GE(x, 0.0f));
+            valid &= ConfigNodeUtil.ParseValue<float>(configNode, "rewardFunds", x => rewardFunds = x, this, 0.0f, x => Validation.GE(x, 0.0f));
+            valid &= ConfigNodeUtil.ParseValue<float>(configNode, "rewardReputation", x => rewardReputation = x, this, 0.0f, x => Validation.GE(x, 0.0f));
+            valid &= ConfigNodeUtil.ParseValue<float>(configNode, "rewardScience", x => rewardScience = x, this, 0.0f, x => Validation.GE(x, 0.0f));
+            valid &= ConfigNodeUtil.ParseValue<float>(configNode, "failureFunds", x => failureFunds = x, this, 0.0f, x => Validation.GE(x, 0.0f));
+            valid &= ConfigNodeUtil.ParseValue<float>(configNode, "failureReputation", x => failureReputation = x, this, 0.0f, x => Validation.GE(x, 0.0f));
 
             // Load flags
-            valid &= ConfigNodeUtil.ParseValue<bool>(configNode, "optional", ref optional, this, false);
-            valid &= ConfigNodeUtil.ParseValue<bool?>(configNode, "disableOnStateChange", ref disableOnStateChange, this, (bool?)null);
+            valid &= ConfigNodeUtil.ParseValue<bool>(configNode, "optional", x => optional = x, this, false);
+            valid &= ConfigNodeUtil.ParseValue<bool?>(configNode, "disableOnStateChange", x => disableOnStateChange = x, this, (bool?)null);
+            valid &= ConfigNodeUtil.ParseValue<bool>(configNode, "completeInSequence", x => completeInSequence = x, this, false);
+            valid &= ConfigNodeUtil.ParseValue<bool>(configNode, "hideChildren", x => hideChildren = x, this, false);
 
-            // Get title
-            valid &= ConfigNodeUtil.ParseValue<string>(configNode, "title", ref title, this, (string)null);
-
-            // Load child nodes
-            childNodes = new List<ParameterFactory>();
-            foreach (ConfigNode childNode in configNode.GetNodes("PARAMETER"))
-            {
-                ParameterFactory child = null;
-                valid &= ParameterFactory.GenerateParameterFactory(childNode, contractType, out child, this);
-                if (child != null)
-                {
-                    childNodes.Add(child);
-                }
-            }
-
-            // Load child requirements
-            requirements = new List<ContractRequirement>();
-            foreach (ConfigNode childNode in configNode.GetNodes("REQUIREMENT"))
-            {
-                ContractRequirement req = null;
-                valid &= ContractRequirement.GenerateRequirement(childNode, contractType, out req);
-                if (req != null)
-                {
-                    requirements.Add(req);
-                }
-            }
+            // Get title and notes
+            valid &= ConfigNodeUtil.ParseValue<string>(configNode, "title", x => title = x, this, (string)null);
+            valid &= ConfigNodeUtil.ParseValue<string>(configNode, "notes", x => notes = x, this, (string)null);
 
             config = configNode.ToString();
             return valid;
@@ -112,6 +103,7 @@ namespace ContractConfigurator
         /// to be used in parameter generation logic).  The following members also do not need to
         /// be loaded for the ContractParameter (they get handled after this method returns):
         ///   - title
+        ///   - notes
         ///   - rewardScience
         ///   - rewardReputation
         ///   - rewardFunds
@@ -120,6 +112,7 @@ namespace ContractConfigurator
         ///   - advanceFunds
         ///   - optional
         ///   - disableOnStateChange
+        ///   - completeInSequence
         ///   - child PARAMETER nodes
         /// </summary>
         /// <param name="contract">Contract to generate for</param>
@@ -138,6 +131,7 @@ namespace ContractConfigurator
             // First check any requirements
             if (!ContractRequirement.RequirementsMet(contract, contract.contractType, requirements))
             {
+                LoggingUtil.LogVerbose(typeof(ParameterFactory), "Returning null for " + contract.contractType.name + "." + name + ": requirements not met.");
                 return null;
             }
 
@@ -164,6 +158,15 @@ namespace ContractConfigurator
             }
             parameter.ID = name;
 
+            // Special stuff for contract configurator parameters
+            ContractConfiguratorParameter ccParam = parameter as ContractConfiguratorParameter;
+            if (ccParam != null)
+            {
+                ccParam.completeInSequence = completeInSequence;
+                ccParam.notes = notes;
+                ccParam.hideChildren = hideChildren;
+            }
+
             return parameter;
         }
 
@@ -174,7 +177,8 @@ namespace ContractConfigurator
         /// <param name="contract">Contract to generate for</param>
         /// <param name="contractParamHost">The object to use as a parent for ContractParameters</param>
         /// <param name="paramFactories">The ParameterFactory objects to use to generate parameters.</param>
-        public static void GenerateParameters(ConfiguredContract contract, IContractParameterHost contractParamHost, List<ParameterFactory> paramFactories)
+        /// <returns>Whether the generation was successful.</returns>
+        public static bool GenerateParameters(ConfiguredContract contract, IContractParameterHost contractParamHost, List<ParameterFactory> paramFactories)
         {
             foreach (ParameterFactory paramFactory in paramFactories)
             {
@@ -185,10 +189,28 @@ namespace ContractConfigurator
                     // Get the child parameters
                     if (parameter != null)
                     {
-                        GenerateParameters(contract, parameter, paramFactory.childNodes);
+                        if (!GenerateParameters(contract, parameter, paramFactory.childNodes))
+                        {
+                            return false;
+                        }
+                    }
+
+                    ContractConfiguratorParameter ccParam = parameter as ContractConfiguratorParameter;
+                    if (ccParam != null && ccParam.hideChildren)
+                    {
+                        foreach (ContractParameter child in ccParam.GetChildren())
+                        {
+                            ContractConfiguratorParameter ccChild = child as ContractConfiguratorParameter;
+                            if (ccChild != null)
+                            {
+                                ccChild.Hide();
+                            }
+                        }
                     }
                 }
             }
+
+            return true;
         }
 
         /// <summary>
@@ -227,15 +249,25 @@ namespace ContractConfigurator
         {
             // Logging on
             LoggingUtil.CaptureLog = true;
+            bool valid = true;
 
             // Get the type
             string type = parameterConfig.GetValue("type");
-            if (!factories.ContainsKey(type))
+            string name = parameterConfig.HasValue("name") ? parameterConfig.GetValue("name") : type;
+            if (string.IsNullOrEmpty(type))
+            {
+                LoggingUtil.LogError(typeof(ParameterFactory), "CONTRACT_TYPE '" + contractType.name + "'," +
+                    "PARAMETER '" + parameterConfig.GetValue("name") + "' does not specify the mandatory 'type' attribute.");
+                paramFactory = new InvalidParameterFactory();
+                valid = false;
+            }
+            else if (!factories.ContainsKey(type))
             {
                 LoggingUtil.LogError(typeof(ParameterFactory), "CONTRACT_TYPE '" + contractType.name + "'," +
                     "PARAMETER '" + parameterConfig.GetValue("name") + "' of type '" + parameterConfig.GetValue("type") + "': " +
                     "No ParameterFactory has been registered for type '" + type + "'.");
                 paramFactory = new InvalidParameterFactory();
+                valid = false;
             }
             else
             {
@@ -246,9 +278,10 @@ namespace ContractConfigurator
             // Set attributes
             paramFactory.parent = parent;
             paramFactory.contractType = contractType;
+            paramFactory.dataNode = new DataNode(name, parent != null ? parent.dataNode : contractType.dataNode, paramFactory);
 
             // Load config
-            bool valid = paramFactory.Load(parameterConfig);
+            valid &= paramFactory.Load(parameterConfig);
 
             // Check for unexpected values - always do this last
             if (paramFactory.GetType() != typeof(InvalidParameterFactory))
@@ -256,9 +289,40 @@ namespace ContractConfigurator
                 valid &= ConfigNodeUtil.ValidateUnexpectedValues(parameterConfig, paramFactory);
             }
 
-            paramFactory.enabled = valid;
             paramFactory.log = LoggingUtil.capturedLog;
             LoggingUtil.CaptureLog = false;
+
+            // Load child nodes
+            foreach (ConfigNode childNode in ConfigNodeUtil.GetChildNodes(parameterConfig, "PARAMETER"))
+            {
+                ParameterFactory child = null;
+                valid &= ParameterFactory.GenerateParameterFactory(childNode, contractType, out child, paramFactory);
+                if (child != null)
+                {
+                    paramFactory.childNodes.Add(child);
+                    if (child.hasWarnings)
+                    {
+                        paramFactory.hasWarnings = true;
+                    }
+                }
+            }
+
+            // Load child requirements
+            foreach (ConfigNode childNode in ConfigNodeUtil.GetChildNodes(parameterConfig, "REQUIREMENT"))
+            {
+                ContractRequirement req = null;
+                valid &= ContractRequirement.GenerateRequirement(childNode, contractType, out req, paramFactory);
+                if (req != null)
+                {
+                    paramFactory.requirements.Add(req);
+                    if (req.hasWarnings)
+                    {
+                        paramFactory.hasWarnings = true;
+                    }
+                }
+            }
+
+            paramFactory.enabled = valid;
 
             return valid;
         }
@@ -291,10 +355,9 @@ namespace ContractConfigurator
         /// <returns>True if the targetBody has been loaded, logs and error and returns false otherwise.</returns>
         protected virtual bool ValidateTargetBody(ConfigNode configNode)
         {
-            if (targetBody == null)
+            if (targetBody == null && dataNode.IsDeterministic("targetBody") && dataNode.IsInitialized("targetBody"))
             {
-                Debug.LogError("ContractConfigurator: " + ErrorPrefix(configNode) +
-                    ": targetBody for " + GetType() + " must be specified.");
+                LoggingUtil.LogError(this, ErrorPrefix(configNode) + ": targetBody for " + GetType() + " must be specified.");
                 return false;
             }
             return true;

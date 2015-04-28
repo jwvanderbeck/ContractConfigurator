@@ -5,7 +5,7 @@ using System.Text;
 using UnityEngine;
 using KSP;
 using ContractConfigurator;
-
+using ContractConfigurator.ExpressionParser;
 namespace ContractConfigurator.Behaviour
 {
     /// <summary>
@@ -22,15 +22,25 @@ namespace ContractConfigurator.Behaviour
             // Load base class
             bool valid = base.Load(configNode);
 
-            valid &= ConfigNodeUtil.ParseValue<string>(configNode, "title", ref title, this);
-            valid &= ConfigNodeUtil.ParseValue<string>(configNode, "message", ref message, this);
+            valid &= ConfigNodeUtil.ParseValue<string>(configNode, "title", x => title = x, this);
+            valid &= ConfigNodeUtil.ParseValue<string>(configNode, "message", x => message = x, this);
 
-            foreach (ConfigNode child in configNode.GetNodes("CONDITION"))
+            int index = 0;
+            foreach (ConfigNode child in ConfigNodeUtil.GetChildNodes(configNode, "CONDITION"))
             {
-                Message.ConditionDetail cd = new Message.ConditionDetail();
-                valid &= ConfigNodeUtil.ParseValue<Message.ConditionDetail.Condition>(child, "condition", ref cd.condition, this);
-                valid &= ConfigNodeUtil.ParseValue<string>(child, "parameter", ref cd.parameter, this, (string)null, x => ValidateMandatoryParameter(x, cd.condition));
-                conditions.Add(cd);
+                DataNode childDataNode = new DataNode("CONDITION_" + index++, dataNode, this);
+                try
+                {
+                    ConfigNodeUtil.SetCurrentDataNode(childDataNode);
+                    Message.ConditionDetail cd = new Message.ConditionDetail();
+                    valid &= ConfigNodeUtil.ParseValue<Message.ConditionDetail.Condition>(child, "condition", x => cd.condition = x, this);
+                    valid &= ConfigNodeUtil.ParseValue<string>(child, "parameter", x => cd.parameter = x, this, (string)null, x => ValidateMandatoryParameter(x, cd.condition));
+                    conditions.Add(cd);
+                }
+                finally
+                {
+                    ConfigNodeUtil.SetCurrentDataNode(dataNode);
+                }
             }
             valid &= ConfigNodeUtil.ValidateMandatoryChild(configNode, "CONDITION", this);
 

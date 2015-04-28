@@ -10,9 +10,9 @@ using ContractConfigurator.Parameters;
 
 namespace ContractConfigurator
 {
-    /*
-     * ParameterFactory wrapper for HasCrew ContractParameter.
-     */
+    /// <summary>
+    /// ParameterFactory wrapper for HasCrew ContractParameter.
+    /// </summary>
     public class HasCrewFactory : ParameterFactory
     {
         protected string trait;
@@ -21,24 +21,37 @@ namespace ContractConfigurator
         protected int minCrew;
         protected int maxCrew;
 
+        protected List<Kerbal> kerbal;
+
         public override bool Load(ConfigNode configNode)
         {
             // Load base class
             bool valid = base.Load(configNode);
 
-            valid &= ConfigNodeUtil.ParseValue<string>(configNode, "trait", ref trait, this, (string)null);
-            valid &= ConfigNodeUtil.ParseValue<int>(configNode, "minExperience", ref minExperience, this, 0, x => Validation.Between(x, 0, 5));
-            valid &= ConfigNodeUtil.ParseValue<int>(configNode, "maxExperience", ref maxExperience, this, 5, x => Validation.Between(x, 0, 5));
-            valid &= ConfigNodeUtil.ParseValue<int>(configNode, "minCrew", ref minCrew, this, 1, x => Validation.GE(x, 0));
-            valid &= ConfigNodeUtil.ParseValue<int>(configNode, "maxCrew", ref maxCrew, this, int.MaxValue, x => Validation.GE(x, minCrew));
-            valid &= ConfigNodeUtil.AtLeastOne(configNode, new string[] { "trait", "minExperience", "maxExperience", "minCrew", "maxCrew" }, this);
+            valid &= ConfigNodeUtil.ParseValue<string>(configNode, "trait", x => trait = x, this, (string)null);
+            valid &= ConfigNodeUtil.ParseValue<int>(configNode, "minExperience", x => minExperience = x, this, 0, x => Validation.Between(x, 0, 5));
+            valid &= ConfigNodeUtil.ParseValue<int>(configNode, "maxExperience", x => maxExperience = x, this, 5, x => Validation.Between(x, 0, 5));
+            valid &= ConfigNodeUtil.ParseValue<int>(configNode, "minCrew", x => minCrew = x, this, 1, x => Validation.GE(x, 0));
+            valid &= ConfigNodeUtil.ParseValue<int>(configNode, "maxCrew", x => maxCrew = x, this, int.MaxValue, x => Validation.GE(x, minCrew));
+
+            valid &= ConfigNodeUtil.ParseValue<List<Kerbal>>(configNode, "kerbal", x => kerbal = x, this, new List<Kerbal>());
+
+            valid &= ConfigNodeUtil.AtLeastOne(configNode, new string[] { "trait", "minExperience", "maxExperience", "minCrew", "maxCrew", "kerbal" }, this);
+            valid &= ConfigNodeUtil.MutuallyExclusive(configNode, new string[] { "trait", "minExperience", "maxExperience", "minCrew", "maxCrew" },
+                new string[] { "kerbal" }, this);
 
             return valid;
         }
 
         public override ContractParameter Generate(Contract contract)
         {
-            return new HasCrew(title, trait, minCrew, maxCrew, minExperience, maxExperience);
+            // Do this late because of potential for deferred loads
+            if (kerbal.Count > 0)
+            {
+                minCrew = 0;
+            }
+
+            return new HasCrew(title, kerbal.Select<Kerbal, ProtoCrewMember>(k => k.pcm), trait, minCrew, maxCrew, minExperience, maxExperience);
         }
     }
 }

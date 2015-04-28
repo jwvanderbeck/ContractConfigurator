@@ -7,6 +7,7 @@ using UnityEngine;
 using KSP;
 using KSPAchievements;
 using Contracts;
+using Contracts.Agents;
 using Contracts.Parameters;
 using System.Text.RegularExpressions;
 
@@ -18,11 +19,34 @@ namespace ContractConfigurator
     public class ConfiguredContract : Contract
     {
         public ContractType contractType { get; private set; }
+        public string subType { get; private set; }
         private List<ContractBehaviour> behaviours = new List<ContractBehaviour>();
         public IEnumerable<ContractBehaviour> Behaviours { get { return behaviours.AsReadOnly(); } }
 
+		public static string contractTypeName(Contract c)
+		{
+            if (c == null || c.GetType() != typeof(ConfiguredContract))
+            {
+                return "";
+            }
+
+            ConfiguredContract cc = (ConfiguredContract)c;
+            return cc.contractType != null ? cc.contractType.name : "";
+		}
+
+        protected string title;
+        protected string description;
+        protected string synopsis;
+        protected string completedMessage;
+        protected string notes;
+
+        public int hash { get; private set; }
+
         private static int lastGenerationFailure = 0;
         private static Dictionary<ContractPrestige, int> lastSpecificGenerationFailure = new Dictionary<ContractPrestige, int>();
+        private static int nextGroup = 0;
+
+        public static ConfiguredContract currentContract = null;
 
         protected override bool Generate()
         {
@@ -37,6 +61,8 @@ namespace ContractConfigurator
             }
 
             LoggingUtil.LogDebug(this.GetType(), "Generating contract: " + contractType);
+
+            hash = contractType.hash;
 
             // Set the agent
             if (contractType.agent != null)
@@ -70,14 +96,43 @@ namespace ContractConfigurator
             SetReputation(contractType.rewardReputation, contractType.failureReputation, contractType.targetBody);
             SetFunds(contractType.advanceFunds, contractType.rewardFunds, contractType.failureFunds, contractType.targetBody);
 
+            // Copy text from contract type
+            title = contractType.title;
+            synopsis = contractType.synopsis;
+            completedMessage = contractType.completedMessage;
+            notes = contractType.notes;
+
+            // Set description
+            if (string.IsNullOrEmpty(contractType.description))
+            {
+                if (agent == null)
+                {
+                    agent = AgentList.Instance.GetSuitableAgentForContract(this);
+                }
+
+                // Generate the contract description
+                description = TextGen.GenerateBackStories(agent.Name, agent.GetMindsetString(),
+                    contractType.topic, contractType.subject, contractType.motivation, MissionSeed);
+            }
+            else
+            {
+                description = contractType.description;
+            }
+
             // Generate behaviours
             behaviours = new List<ContractBehaviour>();
-            contractType.GenerateBehaviours(this);
+            if (!contractType.GenerateBehaviours(this))
+            {
+                return false;
+            }
 
             // Generate parameters
             try
             {
-                contractType.GenerateParameters(this);
+                if (!contractType.GenerateParameters(this))
+                {
+                    return false;
+                }
             }
             catch (Exception e)
             {
@@ -116,47 +171,59 @@ namespace ContractConfigurator
 
         protected override string GetTitle()
         {
-            return contractType.title;
+            return title;
         }
 
         protected override string GetDescription()
         {
-            if (contractType.description == null || contractType.description == "")
-            {
-                // Generate the contract description
-                return TextGen.GenerateBackStories(agent.Name, agent.GetMindsetString(),
-                    contractType.topic, contractType.subject, contractType.motivation, MissionSeed);
-            }
-            else
-            {
-                return contractType.description;
-            }
+            return description;
         }
 
         protected override string GetSynopsys()
         {
-            return contractType.synopsis != null ? contractType.synopsis : "";
+            return synopsis ?? "";
         }
 
         protected override string MessageCompleted()
         {
-            return contractType.completedMessage != null ? contractType.completedMessage + "\n" : "";
+            return completedMessage ?? "";
         }
 
         protected override string GetNotes()
         {
-            return contractType.notes != null ? contractType.notes + "\n" : "";
+            return string.IsNullOrEmpty(notes) ? "" : notes + "\n";
         }
         
         protected override void OnLoad(ConfigNode node)
         {
             try
             {
-                contractType = ContractType.GetContractType(node.GetValue("subtype"));
+                subType = node.GetValue("subtype");
+                contractType = string.IsNullOrEmpty(subType) ? null : ContractType.GetContractType(subType);
+                title = ConfigNodeUtil.ParseValue<string>(node, "title", contractType != null ? contractType.title : subType);
+                description = ConfigNodeUtil.ParseValue<string>(node, "description", contractType != null ? contractType.description : "");
+                synopsis = ConfigNodeUtil.ParseValue<string>(node, "synopsis", contractType != null ? contractType.synopsis : "");
+                completedMessage = ConfigNodeUtil.ParseValue<string>(node, "completedMessage", contractType != null ? contractType.completedMessage : "");
+                notes = ConfigNodeUtil.ParseValue<string>(node, "notes", contractType != null ? contractType.notes : "");
+                hash = ConfigNodeUtil.ParseValue<int>(node, "hash", contractType != null ? contractType.hash : 0);
+
                 foreach (ConfigNode child in node.GetNodes("BEHAVIOUR"))
                 {
                     ContractBehaviour behaviour = ContractBehaviour.LoadBehaviour(child, this);
                     behaviours.Add(behaviour);
+                }
+
+                // If the contract type is null, then it likely means that it was uninstalled
+                if (contractType == null)
+                {
+                    LoggingUtil.LogWarning(this, "Error loading contract for contract type '" + subType +
+                        "'.  The contract type either failed to load or was uninstalled.");
+                    try
+                    {
+                        SetState(State.Failed);
+                    }
+                    catch { }
+                    return;
                 }
             }
             catch (Exception e)
@@ -165,7 +232,11 @@ namespace ContractConfigurator
                 LoggingUtil.LogException(e);
                 ExceptionLogWindow.DisplayFatalException(ExceptionLogWindow.ExceptionSituation.CONTRACT_LOAD, e, this);
 
-                SetState(State.Failed);
+                try
+                {
+                    SetState(State.Failed);
+                }
+                catch { }
             }
         }
 
@@ -173,7 +244,14 @@ namespace ContractConfigurator
         {
             try
             {
-                node.AddValue("subtype", contractType.name);
+                node.AddValue("subtype", subType);
+                node.AddValue("title", title);
+                node.AddValue("description", description);
+                node.AddValue("synopsis", synopsis);
+                node.AddValue("completedMessage", completedMessage);
+                node.AddValue("notes", notes);
+                node.AddValue("hash", hash);
+
                 foreach (ContractBehaviour behaviour in behaviours)
                 {
                     ConfigNode child = new ConfigNode("BEHAVIOUR");
@@ -201,7 +279,12 @@ namespace ContractConfigurator
             else 
             {
                 // ContractType already chosen, check if still meets requirements.
-                return contractType.MeetRequirements(this);
+                bool meets = contractType.MeetRequirements(this);
+                if (ContractState == State.Active && !meets)
+                {
+                    LoggingUtil.LogWarning(this, "Removed contract '" + title + "', as it no longer meets the requirements.");
+                }
+                return meets;
             }
         }
 
@@ -212,75 +295,94 @@ namespace ContractConfigurator
                 lastSpecificGenerationFailure[prestige] = 0;
             }
 
-            // Build a weighted list of ContractTypes to choose from
-            Dictionary<ContractType, double> validContractTypes = new Dictionary<ContractType, double>();
-            double totalWeight = 0.0;
-            foreach (ContractType ct in ContractType.AllValidContractTypes)
-            {
-                LoggingUtil.LogVerbose(this, "Checking ContractType = " + ct.name);
-                // KSP tries to generate new contracts *incessantly*, to the point where this becomes
-                // a real performance problem.  So if we run into a situation where we did not
-                // generate a contract and we are asked AGAIN after a very short time, then do
-                // some logic to prevent re-checking uselessly.
+            LoggingUtil.LogVerbose(this, "Generating a contract for prestige = " + prestige);
 
-                // If there was any generation failure within the last 100 frames, only look at
-                // contracts specific to that prestige level
-                if (lastGenerationFailure + 100 > Time.frameCount)
+            // Loop through all the contract groups
+            IEnumerable<ContractGroup> groups = ContractGroup.AllGroups;
+            foreach (ContractGroup group in groups.Skip(nextGroup).Concat(groups.Take(nextGroup)))
+            {
+                LoggingUtil.LogVerbose(this, "Looking at group " + group);
+                nextGroup = (nextGroup + 1) % groups.Count();
+
+                // Build a weighted list of ContractTypes to choose from
+                Dictionary<ContractType, double> validContractTypes = new Dictionary<ContractType, double>();
+                double totalWeight = 0.0;
+                foreach (ContractType ct in ContractType.AllValidContractTypes.Where(ct => ct.group == group))
                 {
-                    // If there was a generation failure for this specific prestige level in
-                    // the last 100 frames, then just skip the checks entirely
-                    if (lastSpecificGenerationFailure[prestige] + 100 > Time.frameCount)
+                    LoggingUtil.LogVerbose(this, "Checking ContractType = " + ct.name);
+                    // KSP tries to generate new contracts *incessantly*, to the point where this becomes
+                    // a real performance problem.  So if we run into a situation where we did not
+                    // generate a contract and we are asked AGAIN after a very short time, then do
+                    // some logic to prevent re-checking uselessly.
+
+                    // If there was any generation failure within the last 100 frames, only look at
+                    // contracts specific to that prestige level
+                    if (lastGenerationFailure + 100 > Time.frameCount)
                     {
-                        return false;
+                        // If there was a generation failure for this specific prestige level in
+                        // the last 100 frames, then just skip the checks entirely
+                        if (lastSpecificGenerationFailure[prestige] + 100 > Time.frameCount)
+                        {
+                            return false;
+                        }
                     }
 
-                    if (ct.prestige != null && ct.prestige.Value == prestige)
+                    // Only select contracts with the correct prestige level
+                    if (ct.prestige.Count == 0 || ct.prestige.Contains(prestige))
                     {
                         validContractTypes.Add(ct, ct.weight);
                         totalWeight += ct.weight;
                     }
                 }
-                else
-                {
-                    validContractTypes.Add(ct, ct.weight);
-                    totalWeight += ct.weight;
-                }
-            }
 
-            // Loop until we either run out of contracts in our list or make a selection
-            System.Random generator = new System.Random(this.MissionSeed);
-            while (validContractTypes.Count > 0)
-            {
-                ContractType selectedContractType = null;
-                // Pick one of the contract types based on their weight
-                double value = generator.NextDouble() * totalWeight;
-                foreach (KeyValuePair<ContractType, double> pair in validContractTypes)
+                // Loop until we either run out of contracts in our list or make a selection
+                System.Random generator = new System.Random(this.MissionSeed);
+                while (validContractTypes.Count > 0)
                 {
-                    value -= pair.Value;
-                    if (value <= 0.0)
+                    ContractType selectedContractType = null;
+                    // Pick one of the contract types based on their weight
+                    double value = generator.NextDouble() * totalWeight;
+                    foreach (KeyValuePair<ContractType, double> pair in validContractTypes)
                     {
-                        selectedContractType = pair.Key;
-                        break;
+                        value -= pair.Value;
+                        if (value <= 0.0)
+                        {
+                            selectedContractType = pair.Key;
+                            break;
+                        }
                     }
-                }
 
-                // Shouldn't happen, but floating point rounding could put us here
-                if (contractType == null)
-                {
-                    selectedContractType = validContractTypes.First().Key;
-                }
+                    // Shouldn't happen, but floating point rounding could put us here
+                    if (selectedContractType == null)
+                    {
+                        selectedContractType = validContractTypes.First().Key;
+                    }
 
-                // Check the requirements for our selection
-                if (selectedContractType.MeetRequirements(this))
-                {
-                    contractType = selectedContractType;
-                    return true;
-                }
-                // Remote the selection, and try again
-                else
-                {
-                    validContractTypes.Remove(selectedContractType);
-                    totalWeight -= selectedContractType.weight;
+                    // Try to refresh non-deterministic values before we check requirements
+                    currentContract = this;
+                    LoggingUtil.LogVerbose(this, "Refresh non-deterministic values for CONTRACT_TYPE = " + selectedContractType.name);
+                    if (!ConfigNodeUtil.UpdateNonDeterministicValues(selectedContractType.dataNode))
+                    {
+                        LoggingUtil.LogVerbose(this, selectedContractType.name + " was not generated: non-deterministic expression failure.");
+                        validContractTypes.Remove(selectedContractType);
+                        totalWeight -= selectedContractType.weight;
+                    }
+                    currentContract = null;
+
+                    // Check the requirements for our selection
+                    if (selectedContractType.MeetRequirements(this))
+                    {
+                        contractType = selectedContractType;
+                        subType = contractType.name;
+                        return true;
+                    }
+                    // Remove the selection, and try again
+                    else
+                    {
+                        LoggingUtil.LogVerbose(this, selectedContractType.name + " was not generated: requirement not met.");
+                        validContractTypes.Remove(selectedContractType);
+                        totalWeight -= selectedContractType.weight;
+                    }
                 }
             }
 
@@ -296,7 +398,8 @@ namespace ContractConfigurator
             // Remove the stuff that's supposed to be hidden from the mission control text
             string str = base.MissionControlTextRich();
             str = Regex.Replace(str, "\r", "");
-            str = Regex.Replace(str, "<b><#......>:.*?\n\n", "", RegexOptions.Singleline);
+            str = Regex.Replace(str, @"<b><#......>*:.*?\n\n", "", RegexOptions.Singleline);
+            str = Regex.Replace(str, @"<b><#......>\s*:.*?\n", "", RegexOptions.Singleline);
             return str;
         }
 
@@ -471,7 +574,7 @@ namespace ContractConfigurator
 
         public override string ToString()
         {
-            return contractType.name;
+            return contractType != null ? contractType.name : "unknown";
         }
     }
 }

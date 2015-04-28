@@ -32,9 +32,9 @@ namespace ContractConfigurator
 
         private static Dictionary<string, LogLevel> specificLogLevels = new Dictionary<string, LogLevel>();
 
-        /*
-         * Loads debugging configurations.
-         */
+        /// <summary>
+        /// Loads debugging configurations.
+        /// </summary>
         public static void LoadDebuggingConfig()
         {
             Debug.Log("[INFO] ContractConfigurator.LoggingUtil: Loading DebuggingConfig node.");
@@ -116,6 +116,12 @@ namespace ContractConfigurator
             }
         }
 
+        public static LogLevel GetLogLevel(Type t)
+        {
+            return specificLogLevels.ContainsKey(t.Name) ? specificLogLevels[t.Name] : logLevel;
+        }
+
+
         public static void LogVerbose(System.Object obj, string message)
         {
             LoggingUtil.Log(LogLevel.VERBOSE, obj.GetType(), message);
@@ -147,6 +153,13 @@ namespace ContractConfigurator
 
         public static void LogWarning(System.Object obj, string message)
         {
+            // Set the hasWarnings flag
+            IContractConfiguratorFactory ccFactory = obj as IContractConfiguratorFactory;
+            if (ccFactory != null)
+            {
+                ccFactory.hasWarnings = true;
+            }
+
             LoggingUtil.Log(LogLevel.WARNING, obj.GetType(), message);
         }
 
@@ -169,11 +182,23 @@ namespace ContractConfigurator
         {
             if (captureLog)
             {
-                capturedLog += "[EXCEPTION] " + e.Message + "\n" + e.StackTrace + "\n";
+                capturedLog += "[EXCEPTION] ";
+                CaptureException(e);
             }
 
             Debug.LogException(e);
         }
+
+        private static void CaptureException(Exception e)
+        {
+            if (e.InnerException != null)
+            {
+                CaptureException(e.InnerException);
+                capturedLog += "Rethrow as ";
+            }
+            capturedLog += e.GetType() + ": " + e.Message + "\n" + e.StackTrace + "\n";
+        }
+
 
         public static void Log(LogLevel logLevel, Type type, string message)
         {

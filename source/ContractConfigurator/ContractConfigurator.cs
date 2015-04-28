@@ -13,16 +13,28 @@ namespace ContractConfigurator
     [KSPAddon(KSPAddon.Startup.MainMenu, true)]
     public class ContractConfigurator : MonoBehaviour
     {
+        private enum ReloadStep
+        {
+            GAME_DATABASE,
+            MODULE_MANAGER,
+            CLEAR_CONFIG,
+            LOAD_CONFIG,
+            ADJUST_TYPES,
+        }
+
         private static ContractConfigurator Instance;
 
-        static bool reloading = false;
-        static bool loaded = false;
+        public static bool reloading = false;
+        static ReloadStep reloadStep = ReloadStep.GAME_DATABASE;
+
+        static bool loading = false;
         static bool contractTypesAdjusted = false;
 
-        private bool showGUI = false;
+        static ScreenMessage lastMessage = null;
 
         public static int totalContracts = 0;
         public static int successContracts = 0;
+        public static int attemptedContracts = 0;
 
         private bool contractsAppVisible = false;
 
@@ -45,15 +57,23 @@ namespace ContractConfigurator
         void Update()
         {
             // Load all the contract configurator configuration
-            if (HighLogic.LoadedScene == GameScenes.MAINMENU && !loaded)
+            if (HighLogic.LoadedScene == GameScenes.MAINMENU && !loading)
             {
                 LoggingUtil.LoadDebuggingConfig();
+
+                // Log version info
+                var ainfoV = Attribute.GetCustomAttribute(typeof(ExceptionLogWindow).Assembly, typeof(AssemblyInformationalVersionAttribute)) as AssemblyInformationalVersionAttribute;
+                LoggingUtil.LogInfo(this, "Contract Configurator " + ainfoV.InformationalVersion + " loading...");
+
                 RegisterParameterFactories();
                 RegisterBehaviourFactories();
                 RegisterContractRequirements();
-                LoadContractConfig();
+                loading = true;
+                IEnumerator<YieldInstruction> iterator = LoadContractConfig();
+                while (iterator.MoveNext()) { }
                 DebugWindow.LoadTextures();
-                loaded = true;
+
+                LoggingUtil.LogInfo(this, "Contract Configurator " + ainfoV.InformationalVersion + " finished loading.");
             }
             // Try to disable the contract types
             else if ((HighLogic.LoadedScene == GameScenes.SPACECENTER) && !contractTypesAdjusted)
@@ -67,17 +87,52 @@ namespace ContractConfigurator
             // Alt-F9 shows the contract configurator window
             if (GameSettings.MODIFIER_KEY.GetKey() && Input.GetKeyDown(KeyCode.F10))
             {
-                showGUI = !showGUI;
+                DebugWindow.showGUI = !DebugWindow.showGUI;
             }
 
             // Check if the ContractsApp has just become visible
             if (!contractsAppVisible &&
                 ContractsApp.Instance != null &&
-                ContractsApp.Instance.appLauncherButton != null &&
-                ContractsApp.Instance.cascadingList.cascadingList != null &&
-                ContractsApp.Instance.cascadingList.cascadingList.gameObject.activeInHierarchy)
+                ContractsApp.Instance.appLauncherButton != null)
+                // TODO - fix for 1.0
+//                ContractsApp.Instance.cascadingList.cascadingList != null &&
+//                ContractsApp.Instance.cascadingList.cascadingList.gameObject.activeInHierarchy)
             {
                 contractsAppVisible = true;
+            }
+
+            // Display reloading message
+            if (reloading)
+            {
+                if (lastMessage != null)
+                {
+                    ScreenMessages.RemoveMessage(lastMessage);
+                    lastMessage = null;
+                }
+
+                switch (reloadStep)
+                {
+                    case ReloadStep.GAME_DATABASE:
+                        lastMessage = ScreenMessages.PostScreenMessage("Reloading game database...", Time.deltaTime,
+                            ScreenMessageStyle.UPPER_CENTER);
+                        break;
+                    case ReloadStep.MODULE_MANAGER:
+                        lastMessage = ScreenMessages.PostScreenMessage("Reloading module manager...", Time.deltaTime,
+                            ScreenMessageStyle.UPPER_CENTER);
+                        break;
+                    case ReloadStep.CLEAR_CONFIG:
+                        lastMessage = ScreenMessages.PostScreenMessage("Clearing previously loaded contract configuration...", Time.deltaTime,
+                            ScreenMessageStyle.UPPER_CENTER);
+                        break;
+                    case ReloadStep.LOAD_CONFIG:
+                        lastMessage = ScreenMessages.PostScreenMessage("Loading contract configuration (" + attemptedContracts + "/" + totalContracts + ")...", Time.deltaTime,
+                            ScreenMessageStyle.UPPER_CENTER);
+                        break;
+                    case ReloadStep.ADJUST_TYPES:
+                        lastMessage = ScreenMessages.PostScreenMessage("Adjusting contract types...", Time.deltaTime,
+                            ScreenMessageStyle.UPPER_CENTER);
+                        break;
+                }
             }
 
             // Fire update events
@@ -98,9 +153,10 @@ namespace ContractConfigurator
         {
             // ContractsApp is visible
             if (ContractsApp.Instance != null &&
-                ContractsApp.Instance.appLauncherButton != null &&
-                ContractsApp.Instance.cascadingList.cascadingList != null &&
-                ContractsApp.Instance.cascadingList.cascadingList.gameObject.activeInHierarchy)
+                ContractsApp.Instance.appLauncherButton != null)
+                // TODO - fix for 1.0
+//                ContractsApp.Instance.cascadingList.cascadingList != null &&
+//                ContractsApp.Instance.cascadingList.cascadingList.gameObject.activeInHierarchy)
             {
                 contractsAppVisible = true;
             }
@@ -116,10 +172,7 @@ namespace ContractConfigurator
 
         public void OnGUI()
         {
-            if (showGUI)
-            {
-                DebugWindow.OnGUI();
-            }
+            DebugWindow.OnGUI();
             ExceptionLogWindow.OnGUI();
         }
 
@@ -137,20 +190,19 @@ namespace ContractConfigurator
         private IEnumerator<YieldInstruction> ReloadContractTypes()
         {
             reloading = true;
-
-            // Inform the player of the reload process
-            ScreenMessages.PostScreenMessage("Reloading game database...", 2,
-                ScreenMessageStyle.UPPER_CENTER);
-            yield return null;
+            reloadStep = ReloadStep.GAME_DATABASE;
 
             GameDatabase.Instance.Recompile = true;
             GameDatabase.Instance.StartLoad();
 
             // Wait for the reload
             while (!GameDatabase.Instance.IsReady())
-                yield return null;
+            {
+                yield return new WaitForEndOfFrame();
+            }
 
             // Attempt to find module manager and do their reload
+            reloadStep = ReloadStep.MODULE_MANAGER;
             var allMM = from loadedAssemblies in AssemblyLoader.loadedAssemblies
                            let assembly = loadedAssemblies.assembly
                            where assembly.GetName().Name.StartsWith("ModuleManager")
@@ -160,44 +212,47 @@ namespace ContractConfigurator
             // Reload module manager
             if (allMM.Count() > 0)
             {
-                ScreenMessages.PostScreenMessage("Reloading module manager...", 2,
-                    ScreenMessageStyle.UPPER_CENTER);
-
                 Assembly mmAssembly = allMM.First().assembly;
                 LoggingUtil.LogVerbose(this, "Reloading config using ModuleManager: " + mmAssembly.FullName);
 
                 // Get the module manager object
                 Type mmPatchType = mmAssembly.GetType("ModuleManager.MMPatchLoader");
-                UnityEngine.Object mmPatchLoader = FindObjectOfType(mmPatchType);
+                LoadingSystem mmPatchLoader = (LoadingSystem) FindObjectOfType(mmPatchType);
 
-                // Get the methods
-                MethodInfo methodStartLoad = mmPatchType.GetMethod("StartLoad", Type.EmptyTypes);
-                MethodInfo methodIsReady = mmPatchType.GetMethod("IsReady");
-
-                // Start the load
-                methodStartLoad.Invoke(mmPatchLoader, null);
-
-                // Wait for it to complete
-                while (!(bool)methodIsReady.Invoke(mmPatchLoader, null))
+                // Do the module manager load
+                mmPatchLoader.StartLoad();
+                while (!mmPatchLoader.IsReady())
                 {
-                    yield return null;
+                    yield return new WaitForEndOfFrame();
+
                 }
             }
 
-            ScreenMessages.PostScreenMessage("Reloading contract types...", 1.5f,
-                ScreenMessageStyle.UPPER_CENTER);
-
-            // Reload contract configurator
+            // Clear contract configurator
+            reloadStep = ReloadStep.CLEAR_CONFIG;
+            yield return new WaitForEndOfFrame();
             ClearContractConfig();
-            LoadContractConfig();
+
+            // Load contract configurator
+            reloadStep = ReloadStep.LOAD_CONFIG;
+            IEnumerator<YieldInstruction> iterator = LoadContractConfig();
+            while (iterator.MoveNext())
+            {
+                yield return iterator.Current;
+            }
+
+            // Adjust contract types
+            reloadStep = ReloadStep.ADJUST_TYPES;
+            yield return new WaitForEndOfFrame();
             AdjustContractTypes();
 
             // We're done!
+            reloading = false;
             ScreenMessages.PostScreenMessage("Loaded " + successContracts + " out of " + totalContracts
                 + " contracts successfully.", 5, ScreenMessageStyle.UPPER_CENTER);
 
             yield return new WaitForEndOfFrame();
-            reloading = false;
+
             DebugWindow.scrollPosition = new Vector2();
             DebugWindow.scrollPosition2 = new Vector2();
         }
@@ -274,13 +329,13 @@ namespace ContractConfigurator
         {
             ContractGroup.contractGroups.Clear();
             ContractType.ClearContractTypes();
-            totalContracts = successContracts = 0;
+            totalContracts = successContracts = attemptedContracts = 0;
         }
 
         /// <summary>
         /// Loads all the contact configuration nodes and creates ContractType objects.
         /// </summary>
-        void LoadContractConfig()
+        private IEnumerator<YieldInstruction> LoadContractConfig()
         {
             // Load all the contract groups
             LoggingUtil.LogDebug(this.GetType(), "Loading CONTRACT_GROUP nodes.");
@@ -290,7 +345,7 @@ namespace ContractConfigurator
             {
                 // Create the group
                 string name = groupConfig.GetValue("name");
-                LoggingUtil.LogDebug(this.GetType(), "Loading group: '" + name + "'");
+                LoggingUtil.LogInfo(this.GetType(), "Loading CONTRACT_GROUP: '" + name + "'");
                 ContractGroup contractGroup = null;
                 try
                 {
@@ -326,6 +381,7 @@ namespace ContractConfigurator
 
             LoggingUtil.LogDebug(this.GetType(), "Loading CONTRACT_TYPE nodes.");
             ConfigNode[] contractConfigs = GameDatabase.Instance.GetConfigNodes("CONTRACT_TYPE");
+            totalContracts = contractConfigs.Count();
 
             // First pass - create all the ContractType objects
             foreach (ConfigNode contractConfig in contractConfigs)
@@ -345,9 +401,11 @@ namespace ContractConfigurator
             // Second pass - do the actual loading of details
             foreach (ConfigNode contractConfig in contractConfigs)
             {
+                attemptedContracts++;
+                yield return new WaitForEndOfFrame();
+
                 // Fetch the contractType
                 string name = contractConfig.GetValue("name");
-                bool success = false;
                 ContractType contractType = ContractType.GetContractType(name);
                 if (contractType != null)
                 {
@@ -355,7 +413,11 @@ namespace ContractConfigurator
                     // Perform the load
                     try
                     {
-                        success = contractType.Load(contractConfig);
+                        contractType.Load(contractConfig);
+                        if (contractType.enabled)
+                        {
+                            successContracts++;
+                        }
                     }
                     catch (Exception e)
                     {
@@ -364,9 +426,6 @@ namespace ContractConfigurator
                     }
                 }
             }
-
-            successContracts = ContractType.AllValidContractTypes.Count();
-            totalContracts = contractConfigs.Count();
 
             LoggingUtil.LogInfo(this.GetType(), "Loaded " + successContracts + " out of " + totalContracts + " CONTRACT_TYPE nodes.");
 
@@ -436,7 +495,7 @@ namespace ContractConfigurator
             LoggingUtil.LogInfo(this.GetType(), "Disabled " + disabledCounter + " ContractTypes.");
 
             // Now add the ConfiguredContract type
-            int count = (int)(ContractType.AllValidContractTypes.Count() / 4.0 + 0.5);
+            int count = (int)(ContractType.AllValidContractTypes.Count() / 3.0 + 0.5);
             for (int i = 0; i < count; i++)
             {
                 ContractSystem.ContractTypes.Add(typeof(ConfiguredContract));
@@ -447,26 +506,33 @@ namespace ContractConfigurator
             return true;
         }
 
-        public static List<Type> GetAllTypes<T>()
+        public static IEnumerable<Type> GetAllTypes<T>()
         {
             // Get everything that extends the given type
             List<Type> allTypes = new List<Type>();
             foreach (Assembly assembly in AppDomain.CurrentDomain.GetAssemblies())
             {
+                IEnumerable<Type> types = null;
                 try
                 {
-                    foreach (Type t in from type in assembly.GetTypes() where type.IsSubclassOf(typeof(T)) select type)
-                    {
-                        allTypes.Add(t);
-                    }
+                    types = from type in assembly.GetTypes() where (type.IsSubclassOf(typeof(T)) || type.GetInterface(typeof(T).Name) != null) select type;
                 }
                 catch (Exception e)
                 {
-                    LoggingUtil.LogWarning(typeof(ContractConfigurator), "Error loading types from assembly " + assembly.FullName + ": " + e.Message);
+                    LoggingUtil.LogException(new Exception("Error loading types from assembly " + assembly.FullName, e));
+                    continue;
+                }
+
+                foreach (Type t in types)
+                {
+                    Type foundType = t;
+
+                    if (foundType != null)
+                    {
+                        yield return foundType;
+                    }
                 }
             }
-
-            return allTypes;
         }
     }
 }

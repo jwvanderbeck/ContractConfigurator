@@ -29,26 +29,21 @@ namespace ContractConfigurator.Parameters
             public Filter(ParameterDelegateMatchType type) { this.type = type; }
         }
 
-        protected string title { get; set; }
         protected List<Filter> filters { get; set; }
         protected int minCount { get; set; }
         protected int maxCount { get; set; }
 
         public PartValidation()
-            : base()
+            : base(null)
         {
         }
 
         public PartValidation(List<Filter> filters, int minCount = 1, int maxCount = int.MaxValue, string title = null)
-            : base()
+            : base(title)
         {
-            // Vessels should fail if they don't meet the part conditions
-            failWhenUnmet = true;
-
             this.filters = filters;
             this.minCount = minCount;
             this.maxCount = maxCount;
-            this.title = title;
 
             CreateDelegates();
         }
@@ -93,9 +88,7 @@ namespace ContractConfigurator.Parameters
                 // Filter by part modules
                 foreach (string partModule in filter.partModules)
                 {
-                    string moduleName = partModule.Replace("Module", "");
-                    moduleName = Regex.Replace(moduleName, "(\\B[A-Z])", " $1");
-                    AddParameter(new ParameterDelegate<Part>(filter.type.Prefix() + "module: " + moduleName, p => PartHasModule(p, partModule), filter.type));
+                    AddParameter(new ParameterDelegate<Part>(filter.type.Prefix() + "module: " + ModuleName(partModule), p => PartHasModule(p, partModule), filter.type));
                 }
 
                 // Filter by category
@@ -120,6 +113,23 @@ namespace ContractConfigurator.Parameters
             }
         }
 
+        private string ModuleName(string partModule)
+        {
+            string output = partModule.Replace("Module", "");
+
+            // Hardcoded special values
+            if (output == "SAS")
+            {
+                return output;
+            }
+            else if (output == "RTAntenna")
+            {
+                return "Antenna";
+            }
+
+            return Regex.Replace(output, "(\\B[A-Z])", " $1");
+        }
+
         private bool PartHasModule(Part p, string partModule)
         {
             foreach (PartModule pm in p.Modules)
@@ -132,10 +142,26 @@ namespace ContractConfigurator.Parameters
             return false;
         }
 
+        protected override void OnRegister()
+        {
+            base.OnRegister();
+            GameEvents.onVesselWasModified.Add(new EventData<Vessel>.OnEvent(OnVesselWasModified));
+        }
+
+        protected override void OnUnregister()
+        {
+            base.OnUnregister();
+            GameEvents.onVesselWasModified.Remove(new EventData<Vessel>.OnEvent(OnVesselWasModified));
+        }
+
+        protected void OnVesselWasModified(Vessel v)
+        {
+            CheckVessel(v);
+        }
+
         protected override void OnParameterSave(ConfigNode node)
         {
             base.OnParameterSave(node);
-            node.AddValue("title", title);
             node.AddValue("minCount", minCount);
             node.AddValue("maxCount", maxCount);
 
@@ -173,7 +199,6 @@ namespace ContractConfigurator.Parameters
         protected override void OnParameterLoad(ConfigNode node)
         {
             base.OnParameterLoad(node);
-            title = node.GetValue("title");
             minCount = Convert.ToInt32(node.GetValue("minCount"));
             maxCount = Convert.ToInt32(node.GetValue("maxCount"));
 

@@ -8,25 +8,27 @@ using Contracts;
 
 namespace ContractConfigurator
 {
-    /*
-     * Class for assigning a particular behaviour to a contract.
-     */
+    /// <summary>
+    /// Class for assigning a particular behaviour to a contract.
+    /// </summary>
     public class ContractBehaviour
     {
         public ConfiguredContract contract { get; set; }
 
-        /*
-         * Loads a behaviour from a ConfigNode.
-         */
+        /// <summary>
+        /// Loads a behaviour from a ConfigNode.
+        /// </summary>
+        /// <param name="configNode"></param>
+        /// <param name="contract"></param>
+        /// <returns></returns>
         public static ContractBehaviour LoadBehaviour(ConfigNode configNode, ConfiguredContract contract)
         {
             // Determine the type
             string typeName = configNode.GetValue("type");
-            Type type = Type.GetType(typeName);
+            Type type = ContractConfigurator.GetAllTypes<ContractBehaviour>().Where(t => t.FullName == typeName).FirstOrDefault();
             if (type == null)
             {
-                LoggingUtil.LogError(typeof(ContractBehaviour), "No ContractBehaviour with type = '" + typeName + "'.");
-                return null;
+                throw new Exception("No ContractBehaviour with type = '" + typeName + "'.");
             }
 
             // Instantiate and load

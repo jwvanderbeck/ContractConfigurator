@@ -15,7 +15,6 @@ namespace ContractConfigurator.Parameters
     /// </summary>
     public class VesselHasVisited : VesselParameter
     {
-        protected string title { get; set; }
         public CelestialBody destination { get; set; }
         public FlightLog.EntryType entryType { get; set; }
 
@@ -25,7 +24,7 @@ namespace ContractConfigurator.Parameters
         }
 
         public VesselHasVisited(CelestialBody destination, FlightLog.EntryType entryType, string title)
-            : base()
+            : base(title)
         {
             if (title == null)
             {
@@ -74,11 +73,11 @@ namespace ContractConfigurator.Parameters
                 }
                 if (destination != null)
                 {
-                    if (destination.name == "Mun")
-                    {
-                        this.title += "the ";
-                    }
-                    this.title += destination.name;
+                    this.title += destination.theName;
+                }
+                else
+                {
+                    this.title += "any body";
                 }
             }
             else
@@ -89,15 +88,9 @@ namespace ContractConfigurator.Parameters
             this.entryType = entryType;
         }
 
-        protected override string GetTitle()
-        {
-            return title;
-        }
-
         protected override void OnParameterSave(ConfigNode node)
         {
             base.OnParameterSave(node);
-            node.AddValue("title", title);
             node.AddValue("destination", destination.name);
             node.AddValue("entryType", entryType);
         }
@@ -105,7 +98,6 @@ namespace ContractConfigurator.Parameters
         protected override void OnParameterLoad(ConfigNode node)
         {
             base.OnParameterLoad(node);
-            title = node.GetValue("title");
             destination = ConfigNodeUtil.ParseValue<CelestialBody>(node, "destination");
             entryType = (FlightLog.EntryType)Enum.Parse(typeof(FlightLog.EntryType), node.GetValue("entryType"));
         }

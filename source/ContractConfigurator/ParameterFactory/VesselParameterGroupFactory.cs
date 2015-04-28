@@ -14,34 +14,27 @@ namespace ContractConfigurator
     /// </summary>
     public class VesselParameterGroupFactory : ParameterFactory
     {
-        protected double duration;
+        protected Duration duration;
         protected string define;
-        protected List<string> vesselList;
+        protected List<VesselIdentifier> vesselList;
 
-        public IEnumerable<string> Vessel { get { return vesselList; } }
+        public IEnumerable<string> Vessel { get { return vesselList.Select<VesselIdentifier, string>(vi => vi.identifier); } }
 
         public override bool Load(ConfigNode configNode)
         {
             // Load base class
             bool valid = base.Load(configNode);
 
-            // Get duration
-            string durationStr = null;
-            valid &= ConfigNodeUtil.ParseValue<string>(configNode, "duration", ref durationStr, this, "");
-            if (durationStr != null)
-            {
-                duration = durationStr != "" ? DurationUtil.ParseDuration(durationStr) : 0.0;
-            }
-
-            valid &= ConfigNodeUtil.ParseValue<string>(configNode, "define", ref define, this, (string)null);
-            valid &= ConfigNodeUtil.ParseValue<List<string>>(configNode, "vessel", ref vesselList, this, new List<string>());
+            valid &= ConfigNodeUtil.ParseValue<Duration>(configNode, "duration", x => duration = x, this, new Duration(0.0));
+            valid &= ConfigNodeUtil.ParseValue<string>(configNode, "define", x => define = x, this, (string)null);
+            valid &= ConfigNodeUtil.ParseValue<List<VesselIdentifier>>(configNode, "vessel", x => vesselList = x, this, new List<VesselIdentifier>());
 
             return valid;
         }
 
         public override ContractParameter Generate(Contract contract)
         {
-            return new Parameters.VesselParameterGroup(title, define, vesselList, duration);
+            return new Parameters.VesselParameterGroup(title, define, Vessel, duration.Value);
         }
     }
 }
